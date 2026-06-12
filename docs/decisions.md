@@ -6,6 +6,25 @@
 
 ---
 
+## 2026-06-12 · 10 · 主题系统 + ShaderOrb 替换 (PR · feat/theme-and-shader-orb)
+- **上下文**: 用户反馈"面板太黑没层次"且"没有主题切换"。同时希望左侧录音动效换为 stitch 提供的 WebGL fluid shader。
+- **选择**:
+  - **配色调整范围**: B — 引入主题系统 + 调面板, 不只是给面板加层次。
+  - **主题切换语义**: B — 复用风格市场作为主题切换器, 不引入独立 dark/light toggle。OBSIDIAN 重塑为 light 亮色档与 CYBER/VAN_GOGH 暗色档形成对照。
+- **备选**:
+  - A 仅给面板加层次 / C 完全重做视觉。
+  - A dark/light 两套 / C 完全自定义 token。
+- **影响**:
+  - `MarketStyle` 接口新增 `ui` 子对象, 7 个 token (mode/canvasBg/panelBg/panelBorder/textPrimary/textMuted/textSuccess)。
+  - OBSIDIAN background `030712` 黑石板 → `f1f5f9` 亮石板, palette 反向到深色主体。**这是对 instructions.md 的偏离, 需更新规格描述**。
+  - 三块面板 (StyleMarket / Capabilities / TelemetryHUD) 与 page.tsx 全部移除 white/black 硬编码, 改读 ui token, 切风格 = 切主题。
+  - 录音动效: SVG QuantumOrb 删除, 替换为 ShaderOrb (WebGL fluid shader)。
+    · uniforms: u_color1/2/3 来自 marketStyle.palette, u_volume 来自麦克风 RMS, u_listening 控制速率, u_lightMode 在亮主题下反色。
+    · 用 useFluidShader hook 隔离 WebGL 副作用, ResizeObserver 同步 buffer, cleanup 释放 GL 资源防内存泄漏。
+  - 测试 marketStyles "locks Obsidian background" 用例同步改造为亮色档断言, 新增 ui token 完整性用例。
+
+---
+
 ## 2026-06-12 · 09 · 全 UI 字体替换为得意黑 (Smiley Sans)
 - **上下文**: 想统一品牌字体, 强化赛博朋克斜体氛围。得意黑只有 Oblique 一个字重 (设计为斜体展示字)。
 - **选择**:
