@@ -48,10 +48,10 @@ export default function HomePage() {
 
   return (
     <main
-      className="grid h-screen w-screen grid-cols-[280px_1fr_340px] gap-4 p-4 transition-colors"
+      className="grid h-screen w-screen grid-cols-[360px_1fr_420px] gap-5 p-5 transition-colors"
       style={{ backgroundColor: activeStyle.ui.canvasBg }}
     >
-      <section className="flex flex-col gap-4">
+      <section className="flex flex-col gap-5">
         <StyleMarketPanel
           activeStyleId={activeStyleId}
           onActivate={setActiveStyleId}
@@ -65,7 +65,7 @@ export default function HomePage() {
           activeStyle={activeStyle}
         />
         <div
-          className="grid place-items-center rounded-2xl border p-6 backdrop-blur-md"
+          className="grid place-items-center rounded-2xl border p-8 backdrop-blur-md"
           style={{
             backgroundColor: activeStyle.ui.panelBg,
             borderColor: activeStyle.ui.panelBorder,
@@ -91,13 +91,13 @@ export default function HomePage() {
       >
         <VectorStage instruction={simulator.instruction} background={activeStyle.background} />
         <p
-          className="pointer-events-none absolute left-4 top-4 text-[10px] uppercase tracking-[0.3em]"
+          className="pointer-events-none absolute left-5 top-5 text-xs uppercase tracking-[0.3em]"
           style={{ color: activeStyle.ui.textMuted }}
         >
           ACTIVE STYLE · {activeStyle.id}
         </p>
         <p
-          className="pointer-events-none absolute bottom-4 right-4 text-[10px]"
+          className="pointer-events-none absolute bottom-5 right-5 text-xs"
           style={{ color: activeStyle.ui.textMuted }}
         >
           {simulator.streaming ? "STREAMING…" : "STAND BY"}

@@ -59,7 +59,7 @@ export function TelemetryHUD({
 
   return (
     <aside
-      className="flex h-full w-full flex-col gap-4 rounded-2xl border p-4 text-[11px] backdrop-blur-md"
+      className="flex h-full w-full flex-col gap-5 rounded-2xl border p-5 text-[13px] backdrop-blur-md"
       style={{
         backgroundColor: ui.panelBg,
         borderColor: ui.panelBorder,
@@ -67,14 +67,14 @@ export function TelemetryHUD({
       }}
     >
       <header
-        className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em]"
+        className="flex items-center justify-between text-xs uppercase tracking-[0.3em]"
         style={{ color: ui.textMuted }}
       >
         <span>TELEMETRY HUD</span>
         <span style={{ color: style.accent }}>{listening ? "LIVE" : "IDLE"}</span>
       </header>
 
-      <section aria-label="audio-energy" className="grid h-16 grid-cols-24 items-end gap-[2px]">
+      <section aria-label="audio-energy" className="grid h-20 grid-cols-24 items-end gap-[2px]">
         {bars.map((b, idx) => (
           <span
             key={idx}
@@ -90,17 +90,17 @@ export function TelemetryHUD({
 
       <section
         aria-label="partial-json"
-        className="rounded-md p-2"
+        className="rounded-md p-3"
         style={{ backgroundColor: subPanelBg }}
       >
         <p
-          className="mb-1 text-[10px] uppercase tracking-widest"
+          className="mb-1.5 text-xs uppercase tracking-[0.3em]"
           style={{ color: ui.textMuted }}
         >
           PARTIAL_JSON
         </p>
         <pre
-          className="max-h-24 overflow-hidden whitespace-pre-wrap break-all text-[10px]"
+          className="max-h-28 overflow-hidden whitespace-pre-wrap break-all text-xs"
           style={{ color: ui.textPrimary }}
         >
           {latestPartialJson || "—"}
@@ -109,21 +109,21 @@ export function TelemetryHUD({
 
       <section
         aria-label="log-waterfall"
-        className="flex-1 overflow-hidden rounded-md p-2"
+        className="flex-1 overflow-hidden rounded-md p-3"
         style={{ backgroundColor: subPanelBg }}
       >
         <p
-          className="mb-1 text-[10px] uppercase tracking-widest"
+          className="mb-1.5 text-xs uppercase tracking-[0.3em]"
           style={{ color: ui.textMuted }}
         >
           STREAM_LOG
         </p>
-        <ul className="flex h-full flex-col gap-1 overflow-y-auto pr-1">
+        <ul className="flex h-full flex-col gap-1.5 overflow-y-auto pr-1">
           {logs.length === 0 ? (
             <li style={{ color: placeholderColor }}>awaiting voice trigger…</li>
           ) : (
             logs.map((entry) => (
-              <li key={entry.id} className="flex gap-2">
+              <li key={entry.id} className="flex gap-2 text-xs">
                 <span className="shrink-0" style={{ color: ui.textMuted }}>
                   {formatClock(entry.timestamp)}
                 </span>

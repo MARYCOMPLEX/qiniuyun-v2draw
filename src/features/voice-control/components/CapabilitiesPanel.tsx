@@ -36,23 +36,23 @@ export function CapabilitiesPanel({
 
   return (
     <div
-      className="rounded-xl border p-4 backdrop-blur-md"
+      className="rounded-2xl border p-5 backdrop-blur-md"
       style={{ backgroundColor: ui.panelBg, borderColor: ui.panelBorder }}
     >
-      <header className="mb-3 flex items-center justify-between">
+      <header className="mb-4 flex items-center justify-between">
         <h3
-          className="text-xs uppercase tracking-widest"
+          className="text-xs uppercase tracking-[0.3em]"
           style={{ color: ui.textSuccess }}
         >
           Capabilities
         </h3>
         {isLoading && (
-          <span className="text-[10px]" style={{ color: ui.textMuted }}>
+          <span className="text-xs" style={{ color: ui.textMuted }}>
             探测中…
           </span>
         )}
       </header>
-      <ul className="space-y-2">
+      <ul className="space-y-3">
         {ORDER.map((kind) => {
           const cap = capabilities[kind];
           const enabled = toggles[kind] && cap.ready;
@@ -70,7 +70,7 @@ export function CapabilitiesPanel({
               className="flex items-center justify-between gap-3"
               title={tooltip}
             >
-              <span className="text-xs" style={{ color: labelColor }}>
+              <span className="text-sm" style={{ color: labelColor }}>
                 {LABELS[kind]}
               </span>
               <button
@@ -78,7 +78,7 @@ export function CapabilitiesPanel({
                 disabled={disabled}
                 onClick={() => onToggle(kind, !toggles[kind])}
                 className={
-                  "relative h-5 w-10 rounded-full transition " +
+                  "relative h-6 w-11 rounded-full transition " +
                   (disabled ? "cursor-not-allowed" : "cursor-pointer")
                 }
                 style={{ backgroundColor: trackBg }}
@@ -86,8 +86,8 @@ export function CapabilitiesPanel({
               >
                 <span
                   className={
-                    "absolute top-0.5 h-4 w-4 rounded-full transition-all " +
-                    (enabled ? "left-5" : "left-0.5")
+                    "absolute top-0.5 h-5 w-5 rounded-full transition-all " +
+                    (enabled ? "left-[1.375rem]" : "left-0.5")
                   }
                   style={{
                     backgroundColor: ui.mode === "light" ? "#ffffff" : "#f8fafc",

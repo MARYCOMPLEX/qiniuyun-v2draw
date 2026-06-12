@@ -25,11 +25,11 @@ export function StyleMarketPanel({
   return (
     <section
       aria-label="style-market"
-      className="flex w-full flex-col gap-3 rounded-2xl border p-4 backdrop-blur-md"
+      className="flex w-full flex-col gap-3 rounded-2xl border p-5 backdrop-blur-md"
       style={{ backgroundColor: ui.panelBg, borderColor: ui.panelBorder }}
     >
       <header
-        className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em]"
+        className="flex items-center justify-between text-xs uppercase tracking-[0.3em]"
         style={{ color: ui.textMuted }}
       >
         <span>STYLE MARKET</span>
@@ -44,7 +44,7 @@ export function StyleMarketPanel({
                 type="button"
                 onClick={() => onActivate(style.id)}
                 aria-pressed={active}
-                className="group flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition"
+                className="group flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition"
                 style={{
                   borderColor: active ? ui.panelBorder : "transparent",
                   backgroundColor: active
@@ -54,11 +54,11 @@ export function StyleMarketPanel({
                     : "transparent",
                 }}
               >
-                <div className="flex flex-col">
-                  <span className="text-[12px]" style={{ color: ui.textPrimary }}>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm" style={{ color: ui.textPrimary }}>
                     {style.name}
                   </span>
-                  <span className="text-[10px]" style={{ color: ui.textMuted }}>
+                  <span className="text-xs" style={{ color: ui.textMuted }}>
                     {style.tagline}
                   </span>
                 </div>
@@ -66,7 +66,7 @@ export function StyleMarketPanel({
                   {style.palette.map((c) => (
                     <span
                       key={c}
-                      className="block h-3 w-3 rounded-full"
+                      className="block h-3.5 w-3.5 rounded-full"
                       style={{ backgroundColor: c, boxShadow: `0 0 6px ${c}` }}
                     />
                   ))}

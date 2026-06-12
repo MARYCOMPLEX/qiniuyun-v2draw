@@ -32,7 +32,7 @@ export function ShaderOrb({ style, volume, listening, onToggle }: ShaderOrbProps
       onClick={onToggle}
       aria-pressed={listening}
       aria-label="shader-orb-trigger"
-      className="relative grid h-44 w-44 place-items-center overflow-hidden rounded-full p-0 outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-400"
+      className="relative grid h-52 w-52 place-items-center overflow-hidden rounded-full p-0 outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-400"
       style={{ boxShadow: `inset 0 0 0 1px ${ringColor}` }}
     >
       <canvas
@@ -41,7 +41,7 @@ export function ShaderOrb({ style, volume, listening, onToggle }: ShaderOrbProps
         aria-hidden
       />
       <span
-        className="pointer-events-none absolute -bottom-7 text-[10px] uppercase tracking-[0.3em]"
+        className="pointer-events-none absolute -bottom-8 text-xs uppercase tracking-[0.3em]"
         style={{ color: labelColor }}
       >
         {listening ? "LISTENING" : "TAP TO LOCK"}
