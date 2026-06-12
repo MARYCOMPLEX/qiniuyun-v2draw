@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 
 import { VectorStage } from "@/features/art-canvas/components/VectorStage";
 import { CapabilitiesPanel } from "@/features/voice-control/components/CapabilitiesPanel";
-import { QuantumOrb } from "@/features/voice-control/components/QuantumOrb";
+import { ShaderOrb } from "@/features/voice-control/components/ShaderOrb";
 import { StyleMarketPanel } from "@/features/voice-control/components/StyleMarketPanel";
 import { TelemetryHUD } from "@/features/voice-control/components/TelemetryHUD";
 import { useCapabilities } from "@/features/voice-control/hooks/useCapabilities";
@@ -60,7 +60,7 @@ export default function HomePage() {
           onToggle={setToggle}
         />
         <div className="grid place-items-center rounded-2xl border border-white/10 bg-black/80 p-6">
-          <QuantumOrb
+          <ShaderOrb
             style={activeStyle}
             volume={vad.volume}
             listening={vad.listening}
