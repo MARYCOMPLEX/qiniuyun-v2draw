@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.env*
+*.md
+.claude
+logs
+.DS_Store
+docs
+tests
+scripts
+.asr-dump
+coverage
+playwright-report
+test-results
