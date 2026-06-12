@@ -1,21 +1,30 @@
 import { NextResponse } from "next/server";
-import { createOpenAI } from "@ai-sdk/openai";
-import { streamObject } from "ai";
 import { z } from "zod";
 
-import { drawToolSchema } from "@/shared/types/schema";
 import {
   DEFAULT_STYLE_ID,
   getStyleById,
   type StyleId,
 } from "@/shared/constants/marketStyles";
+import { getLlmProviderForRoute, type LlmToolRoute } from "@/shared/providers";
+import { drawToolSchema } from "@/shared/types/schema";
+
 import { buildIronWallPrompt } from "./ironWallPrompt";
 
 export const runtime = "edge";
 
+/**
+ * toolHint — 客户端可显式声明本次请求倾向触发的 toolType,
+ * 路由层据此走不同 (provider, model) 二元组。
+ * Why: 模型还没吐出 toolType, 但客户端往往知道意图 (画几何 vs 生图 vs 搜索),
+ * 用 hint 即可在请求阶段做工具维度路由, 无需等流式开始再切模型。
+ */
 const requestSchema = z.object({
   utterance: z.string().min(1).max(500),
   activeStyleId: z.string().min(1),
+  toolHint: z
+    .enum(["atomic-shape", "diffusion-melt", "web-search", "default"])
+    .optional(),
 });
 
 const respondError = (code: string, message: string, status: number) =>
@@ -34,31 +43,19 @@ export async function POST(request: Request) {
     return respondError("INVALID_PAYLOAD", parsed.error.message, 422);
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    return respondError(
-      "MISSING_API_KEY",
-      "服务端未配置 OPENAI_API_KEY，请使用前端内置模拟器",
-      503,
-    );
-  }
-
+  const route: LlmToolRoute = parsed.data.toolHint ?? "default";
+  const { provider, model } = getLlmProviderForRoute(route);
   const activeStyle = getStyleById(
     (parsed.data.activeStyleId as StyleId) ?? DEFAULT_STYLE_ID,
   );
 
-  const openai = createOpenAI({
-    apiKey,
-    baseURL: process.env.OPENAI_BASE_URL,
-  });
-
-  const result = streamObject({
-    model: openai(process.env.OPENAI_MODEL ?? "gpt-4o-mini"),
-    schema: drawToolSchema,
-    system: buildIronWallPrompt(activeStyle),
-    prompt: parsed.data.utterance,
-    temperature: 0,
-  });
-
-  return result.toTextStreamResponse();
+  return provider
+    .streamDrawTool({
+      systemPrompt: buildIronWallPrompt(activeStyle),
+      userUtterance: parsed.data.utterance,
+      schema: drawToolSchema,
+      model,
+      temperature: 0,
+    })
+    .toTextStreamResponse();
 }
