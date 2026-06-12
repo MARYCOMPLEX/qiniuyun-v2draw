@@ -17,12 +17,11 @@ const buildNotReadyResponse = (): LlmStreamResponse => ({
 
 /**
  * 占位 Provider — env 未配置任何 LLM 时回落到此。
- * Why: 用 Null Object 模式让上层无需写 if/else，
+ * Why: 用 Null Object 模式让上层无需写 if/else,
  * 始终能拿到一个可调用对象，错误响应统一从这里出。
  */
 export const nullLlmProvider: LlmProvider = {
   id: "null",
-  modelId: "null",
   streamDrawTool(_request: LlmStreamRequest): LlmStreamResponse {
     void _request;
     return buildNotReadyResponse();
