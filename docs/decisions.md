@@ -6,6 +6,28 @@
 
 ---
 
+## 2026-06-12 · 11 · UI 密度调优 + light shader 配方修复 (PR · feat/ui-density-and-light-shader)
+- **上下文**: 用户截图反馈两侧栏"内容宽度太小, 字体元素也小"; OBSIDIAN 切到亮主题后 ShaderOrb"看不清"。
+- **选择**:
+  - **侧栏宽度**: B — 280→360, 340→420 (中等放大 ~25%)。
+  - **基础字号**: B — 主流可读阈值 12-14px (主体 13, 标签 12, 主名 14)。
+  - **light shader**: A — 重写亮色配方, 不反色, 用 palette 深色作"水墨晕开"。
+- **备选**:
+  - A 保守 (+20%) / C 响应式百分比 (小屏更挤)。
+  - A 11-13 / C 13-15。
+  - B 半透明背板绷带式 / C 完全换一套 shader。
+- **影响**:
+  - page grid 280/340 → 360/420, gap+padding 4 → 5。
+  - ShaderOrb 176 → 208px, 标签从 10 → 12px。
+  - 三块面板字号统一上调 (header/标签 10→12, 主体 12→14, 主名 12→14)。
+  - light 模式 fragment shader 独立分支:
+    · `ink = clamp(glow*0.18)` 压幅避免过曝。
+    · 中心更深、外圈淡出 (`smoothstep edge`), 水墨在宣纸晕开质感。
+    · alpha 0.55..0.9 渐变而非固定 0.85, 减少糊边。
+  - dark 配方原版保留, light 旧反色公式 `vec3(1.0)-finalColor*0.7` 删除 (低强度区会全白)。
+
+---
+
 ## 2026-06-12 · 10 · 主题系统 + ShaderOrb 替换 (PR · feat/theme-and-shader-orb)
 - **上下文**: 用户反馈"面板太黑没层次"且"没有主题切换"。同时希望左侧录音动效换为 stitch 提供的 WebGL fluid shader。
 - **选择**:
