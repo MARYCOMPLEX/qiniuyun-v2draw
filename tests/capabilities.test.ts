@@ -12,30 +12,38 @@ describe("detectCapabilities", () => {
     expect(result.search.ready).toBe(false);
   });
 
-  it("LLM_PROVIDER=openai-compatible 但缺 OPENAI_API_KEY 时 ready=false 并报缺失", () => {
-    const result = detectCapabilities({ LLM_PROVIDER: "openai-compatible" });
+  it("LLM_DEFAULT_PROVIDER=openai-compatible 但缺 OPENAI_API_KEY 时 ready=false 并报缺失", () => {
+    const result = detectCapabilities({ LLM_DEFAULT_PROVIDER: "openai-compatible" });
     expect(result.llm.ready).toBe(false);
     expect(result.llm.provider).toBe("openai-compatible");
     expect(result.llm.reason).toContain("OPENAI_API_KEY");
   });
 
-  it("LLM_PROVIDER + OPENAI_API_KEY 齐全时 ready=true", () => {
+  it("LLM_DEFAULT_PROVIDER + OPENAI_API_KEY 齐全时 ready=true", () => {
     const result = detectCapabilities({
-      LLM_PROVIDER: "openai-compatible",
+      LLM_DEFAULT_PROVIDER: "openai-compatible",
       OPENAI_API_KEY: "sk-test",
     });
     expect(result.llm.ready).toBe(true);
     expect(result.llm.provider).toBe("openai-compatible");
   });
 
-  it("无效 LLM_PROVIDER 值视为未配置", () => {
-    const result = detectCapabilities({ LLM_PROVIDER: "non-existent-provider" });
+  it("兼容历史字段 LLM_PROVIDER (PR1 命名)", () => {
+    const result = detectCapabilities({
+      LLM_PROVIDER: "openai-compatible",
+      OPENAI_API_KEY: "sk-test",
+    });
+    expect(result.llm.ready).toBe(true);
+  });
+
+  it("无效 LLM_DEFAULT_PROVIDER 值视为未配置", () => {
+    const result = detectCapabilities({ LLM_DEFAULT_PROVIDER: "non-existent-provider" });
     expect(result.llm.ready).toBe(false);
     expect(result.llm.provider).toBeNull();
   });
 
-  it("LLM_PROVIDER=null 显式声明回落到未配置", () => {
-    const result = detectCapabilities({ LLM_PROVIDER: "null" });
+  it("LLM_DEFAULT_PROVIDER=null 显式声明回落到未配置", () => {
+    const result = detectCapabilities({ LLM_DEFAULT_PROVIDER: "null" });
     expect(result.llm.ready).toBe(false);
     expect(result.llm.provider).toBeNull();
   });
@@ -89,7 +97,7 @@ describe("detectCapabilities", () => {
 
   it("空字符串 env 视为未配置（trim 后为空）", () => {
     const result = detectCapabilities({
-      LLM_PROVIDER: "openai-compatible",
+      LLM_DEFAULT_PROVIDER: "openai-compatible",
       OPENAI_API_KEY: "   ",
     });
     expect(result.llm.ready).toBe(false);

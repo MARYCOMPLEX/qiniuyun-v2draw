@@ -52,9 +52,10 @@ const buildSnapshot = (
 };
 
 const detectLlm = (env: EnvLike): CapabilitySnapshot => {
-  const id = env.LLM_PROVIDER;
+  // PR2: env 改为 LLM_DEFAULT_PROVIDER, 兼容历史 LLM_PROVIDER 字段
+  const id = env.LLM_DEFAULT_PROVIDER ?? env.LLM_PROVIDER;
   if (!isProviderId(LLM_PROVIDER_IDS, id) || id === "null") {
-    return { ready: false, provider: null, reason: "未配置 LLM_PROVIDER" };
+    return { ready: false, provider: null, reason: "未配置 LLM_DEFAULT_PROVIDER" };
   }
   const requirements: Record<Exclude<LlmProviderId, "null">, string[]> = {
     "openai-compatible": ["OPENAI_API_KEY"],
