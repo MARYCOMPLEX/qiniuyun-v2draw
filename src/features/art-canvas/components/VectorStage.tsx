@@ -1,17 +1,23 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
-import type { CanvasInstruction } from "../utils/toolDispatcher";
+import type { CanvasShape, ShapeMap } from "../utils/toolDispatcher";
 
 interface VectorStageProps {
-  readonly instruction: CanvasInstruction | null;
+  readonly shapes: ShapeMap;
   readonly background: string;
 }
 
-interface RenderState {
+export interface VectorStageHandle {
+  captureSnapshot(): string | null;
+}
+
+interface RenderEntry {
   current: { x: number; y: number; size: number };
   target: { x: number; y: number; size: number };
+  shape: CanvasShape["shape"];
+  stroke: string;
 }
 
 const LERP_FACTOR = 0.12;
@@ -20,8 +26,8 @@ const lerp = (current: number, target: number): number =>
 
 const drawShape = (
   ctx: CanvasRenderingContext2D,
-  shape: CanvasInstruction["shape"],
-  state: RenderState["current"],
+  shape: CanvasShape["shape"],
+  state: RenderEntry["current"],
   stroke: string,
 ): void => {
   ctx.lineWidth = 2;
@@ -42,75 +48,102 @@ const drawShape = (
 };
 
 /**
- * 物理缓动 Canvas。
- * Why: streamObject 在挤牙膏式补全 size/position 时，画布如果直接用最新值
- * 重绘，视觉上会"跳"。通过 rAF + LERP 把目标值平滑插值到当前值，
- * 物理层抹平网络延迟带来的颗粒感。
+ * 多图元物理缓动 Canvas。
+ * Why: 用 Map<id, RenderEntry> 替代单 instruction, 每个 shape 独立 LERP 收敛。
+ * shape 出现 → entry 加入 map; shape 消失 → entry 从 map 移除; 修改 → 更新 target。
+ * captureSnapshot 通过 ref 暴露, 用于截图反馈回路 (Path 1 MVP)。
  */
-export function VectorStage({ instruction, background }: VectorStageProps) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const stateRef = useRef<RenderState>({
-    current: { x: 480, y: 320, size: 0 },
-    target: { x: 480, y: 320, size: 0 },
-  });
-  const instructionRef = useRef<CanvasInstruction | null>(null);
+export const VectorStage = forwardRef<VectorStageHandle, VectorStageProps>(
+  function VectorStage({ shapes, background }, ref) {
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const entriesRef = useRef<Map<string, RenderEntry>>(new Map());
+    const shapesRef = useRef<ShapeMap>(shapes);
 
-  useEffect(() => {
-    instructionRef.current = instruction;
-    if (instruction && instruction.action !== "delete") {
-      stateRef.current.target = {
-        x: instruction.position.x,
-        y: instruction.position.y,
-        size: instruction.size,
-      };
-    }
-  }, [instruction]);
+    useImperativeHandle(
+      ref,
+      () => ({
+        captureSnapshot: (): string | null => {
+          const canvas = canvasRef.current;
+          if (!canvas) return null;
+          try {
+            return canvas.toDataURL("image/png");
+          } catch {
+            return null;
+          }
+        },
+      }),
+      [],
+    );
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const setupRetina = (): void => {
-      const dpr = Math.min(window.devicePixelRatio ?? 1, 2);
-      const { clientWidth, clientHeight } = canvas;
-      canvas.width = clientWidth * dpr;
-      canvas.height = clientHeight * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    };
-    setupRetina();
-    window.addEventListener("resize", setupRetina);
-
-    let rafId = 0;
-    const tick = (): void => {
-      const { current, target } = stateRef.current;
-      current.x = lerp(current.x, target.x);
-      current.y = lerp(current.y, target.y);
-      current.size = lerp(current.size, target.size);
-
-      ctx.fillStyle = background;
-      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
-
-      const live = instructionRef.current;
-      if (live && live.action !== "delete") {
-        drawShape(ctx, live.shape, current, live.stroke);
+    useEffect(() => {
+      shapesRef.current = shapes;
+      const entries = entriesRef.current;
+      // 新增/更新 target
+      for (const [id, shape] of shapes) {
+        const existing = entries.get(id);
+        if (existing) {
+          existing.target = { x: shape.position.x, y: shape.position.y, size: shape.size };
+          existing.shape = shape.shape;
+          existing.stroke = shape.stroke;
+        } else {
+          entries.set(id, {
+            current: { x: shape.position.x, y: shape.position.y, size: 0 },
+            target: { x: shape.position.x, y: shape.position.y, size: shape.size },
+            shape: shape.shape,
+            stroke: shape.stroke,
+          });
+        }
       }
+      // 不在新 map 里的 entry 直接删 (后续可改成"缩到 0 再删"的退场动画)
+      for (const id of entries.keys()) {
+        if (!shapes.has(id)) entries.delete(id);
+      }
+    }, [shapes]);
+
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const setupRetina = (): void => {
+        const dpr = Math.min(window.devicePixelRatio ?? 1, 2);
+        const { clientWidth, clientHeight } = canvas;
+        canvas.width = clientWidth * dpr;
+        canvas.height = clientHeight * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      };
+      setupRetina();
+      window.addEventListener("resize", setupRetina);
+
+      let rafId = 0;
+      const tick = (): void => {
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+        for (const entry of entriesRef.current.values()) {
+          entry.current.x = lerp(entry.current.x, entry.target.x);
+          entry.current.y = lerp(entry.current.y, entry.target.y);
+          entry.current.size = lerp(entry.current.size, entry.target.size);
+          drawShape(ctx, entry.shape, entry.current, entry.stroke);
+        }
+
+        rafId = requestAnimationFrame(tick);
+      };
       rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
 
-    return () => {
-      cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", setupRetina);
-    };
-  }, [background]);
+      return () => {
+        cancelAnimationFrame(rafId);
+        window.removeEventListener("resize", setupRetina);
+      };
+    }, [background]);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="h-full w-full rounded-2xl border border-white/10"
-      aria-label="voice-canvas-stage"
-    />
-  );
-}
+    return (
+      <canvas
+        ref={canvasRef}
+        className="h-full w-full rounded-2xl border border-white/10"
+        aria-label="voice-canvas-stage"
+      />
+    );
+  },
+);
