@@ -7,9 +7,22 @@
 export { detectCapabilities } from "./capabilities";
 export type { CapabilityKind, CapabilitySnapshot, CapabilitiesMatrix } from "./capabilities";
 
-export { getLlmProvider } from "./llm/registry";
+export {
+  getLlmProvider,
+  getLlmProviderById,
+  getLlmProviderForRoute,
+  getLlmProviderForToolType,
+  type ResolvedLlmCall,
+} from "./llm/registry";
+export { resolveLlmRoute, toolTypeToRoute } from "./llm/route";
 export { LLM_PROVIDER_IDS } from "./llm/types";
-export type { LlmProvider, LlmProviderId, LlmStreamRequest, LlmStreamResponse } from "./llm/types";
+export type {
+  LlmProvider,
+  LlmProviderId,
+  LlmStreamRequest,
+  LlmStreamResponse,
+  LlmToolRoute,
+} from "./llm/types";
 
 export { getAsrProvider } from "./asr/registry";
 export { ASR_PROVIDER_IDS } from "./asr/types";
