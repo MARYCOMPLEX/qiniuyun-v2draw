@@ -208,7 +208,29 @@
 4. CRITICAL / HIGH 级问题必须解决，MEDIUM 视情况，LOW 可记 issue 后置。
 5. 合并方式优先 **Squash**（保留 PR title 作为 squash message），需要保留 commit 历史时使用 **Rebase**，禁止 Merge commit。
 
-### 5.5 安全敏感 PR
+### 5.5 项目阶段适用范围（强制 PR 的触发线）
+
+为避免规范脱离实际，PR 流程的强度按项目阶段递进：
+
+| 阶段 | 状态 | 流程要求 |
+|---|---|---|
+| **早期单人原型** | 仅一名贡献者 + 未部署生产 + 无外部用户 | 允许直推 `main`，但仍遵守 `4. Commit 规范`（Conventional Commits / 单意图 / 中文 subject） |
+| **多人协作 / 触发线之后** | 出现以下任一即切换 | 强制 PR 流程（`5.1 ~ 5.4` 全量生效） |
+
+**触发线**（命中任一即从下一次改动起强制 PR）：
+
+- 出现第二位贡献者（无论人类还是 AI Agent 长期参与）
+- 部署到生产环境（即使是 staging/preview 公网可访问）
+- 有外部 review / 客户验收需求
+- 引入 CI/CD 自动化部署
+
+**生效约定**：
+
+- 触发线之前已直推到 `main` 的 commit 视为既成事实，不回头补 PR / revert / 重写历史。
+- 触发线之后任何新改动必须走 `feat/* | fix/* | refactor/* | chore/* | docs/*` 分支提 PR，不再容忍直推 `main`。
+- 在 PR 描述里 reference 历史直推工作时使用 `(包含早期阶段直推改动)` 标注，让阅读者了解上下文。
+
+### 5.6 安全敏感 PR
 
 涉及鉴权 / 支付 / 用户数据 / 加密 / 文件上传 / SQL 拼接的改动，必须额外触发 `security-reviewer` agent，并在 PR 中附审查结论。
 
