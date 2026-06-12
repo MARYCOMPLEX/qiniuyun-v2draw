@@ -29,10 +29,21 @@ describe("marketStyles registry", () => {
     expect(vg.palette).toEqual(["#f59e0b", "#1d4ed8", "#10b981"]);
   });
 
-  it("locks Obsidian background and palette per spec", () => {
+  it("Obsidian 重塑为亮色档 (主题系统 light 模式) — 与 dark 主题档形成对比", () => {
     const ob = getStyleById("SKILL_OBSIDIAN");
-    expect(ob.background).toBe("#030712");
-    expect(ob.palette).toEqual(["#f8fafc", "#475569", "#38bdf8"]);
+    expect(ob.background).toBe("#f1f5f9");
+    expect(ob.ui.mode).toBe("light");
+    expect(ob.palette).toEqual(["#1e293b", "#475569", "#0284c7"]);
+  });
+
+  it("所有风格携带完整 UI 主题 token", () => {
+    for (const s of MARKET_STYLES) {
+      expect(s.ui.canvasBg).toMatch(/^#|rgba/);
+      expect(s.ui.panelBg).toMatch(/^#|rgba/);
+      expect(s.ui.panelBorder).toMatch(/^#|rgba/);
+      expect(s.ui.textPrimary).toMatch(/^#/);
+      expect(["dark", "light"]).toContain(s.ui.mode);
+    }
   });
 
   it("throws domain error on unknown id", () => {
