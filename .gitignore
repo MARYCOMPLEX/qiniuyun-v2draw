@@ -72,3 +72,4 @@ pnpm-lock.yaml.bak
 
 # Local task instructions (not for repo)
 instructions.md
+docs/

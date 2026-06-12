@@ -6,7 +6,12 @@ interface VoiceVADOptions {
   readonly silenceMs?: number;
   readonly volumeThreshold?: number;
   readonly minUtteranceMs?: number;
-  readonly onUtteranceEnd?: (audio: Blob) => void;
+  /** 每帧 16k 单声道 PCM (Int16 LE), 持续推送给消费者 */
+  readonly onAudioFrame?: (pcm: Uint8Array) => void;
+  /** 检测到开口 — 调用方此时打开 ws 会话 */
+  readonly onUtteranceStart?: () => void;
+  /** 检测到结束 — 调用方此时关闭 ws 会话拿最终结果 */
+  readonly onUtteranceEnd?: () => void;
 }
 
 interface VoiceVADResult {
@@ -23,11 +28,6 @@ const DEFAULT_MIN_UTTERANCE_MS = 400;
 const TARGET_SAMPLE_RATE = 16_000;
 const PRE_ROLL_FRAMES = 4;
 
-/**
- * AudioWorklet 处理器源码 — 在 audio thread 里跑, 不会被主线程卡顿丢帧。
- * 每收到 128 帧 (Web Audio block) 就 postMessage 把 Float32 样本上抛, 加上 RMS。
- * 主线程合成 chunks, 不再做降采样 (AudioContext 已强制 16k)。
- */
 const WORKLET_CODE = `
 class PcmCaptureProcessor extends AudioWorkletProcessor {
   process(inputs) {
@@ -37,7 +37,8 @@ class PcmCaptureProcessor extends AudioWorkletProcessor {
     let sum = 0;
     for (let i = 0; i < channel.length; i++) sum += channel[i] * channel[i];
     const rms = Math.sqrt(sum / channel.length);
-    this.port.postMessage({ samples: channel.slice(0), rms }, [channel.slice(0).buffer]);
+    const copy = channel.slice(0);
+    this.port.postMessage({ samples: copy, rms }, [copy.buffer]);
     return true;
   }
 }
@@ -54,33 +55,23 @@ const float32ToPcm16 = (input: Float32Array): Uint8Array => {
   return out;
 };
 
-const concatPcmChunks = (chunks: readonly Uint8Array[]): Blob => {
-  const total = chunks.reduce((acc, chunk) => acc + chunk.byteLength, 0);
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new Blob([merged], { type: "audio/pcm" });
-};
-
 /**
- * 浏览器麦克风 VAD + AudioWorklet PCM 录音钩子。
- * Why: ScriptProcessor 在 audio worklet 时代会被 throttle 导致丢帧, 录出来断续噪音。
- * 改用 AudioWorklet 跑 audio 专属线程, 强制 AudioContext 走 16k, 直接吐 16k 单声道 PCM,
- * 阿里云 NLS 直接吃, 不需要降采样。
+ * 浏览器麦克风 VAD + 流式 PCM 推送钩子。
+ * Why: 实时识别架构下不再 batch 整段 Blob 上传, 而是每帧 PCM 直接推给 ws。
+ * VAD 只负责"开口/结束"两个边界信号, 调用方据此 start/stop ws 会话,
+ * 中间所有帧通过 onAudioFrame 串流, 实现"边说边出字"。
  *
  * 状态机:
- * - 始终录: postMessage 累积到 ring buffer, 平时只保留 PRE_ROLL_FRAMES 帧
- * - RMS > threshold 第一次: 标记 speaking, 开始累积本句
- * - RMS < threshold 持续 silenceMs: 视为说完, flush PCM Blob, 清空 chunks 继续监听
+ * - 持续录音 + 前置缓冲 PRE_ROLL_FRAMES 帧 (防止开口头部丢字)
+ * - RMS > threshold 第一次: onUtteranceStart 触发, 把前置缓冲帧 + 当前帧推流
+ * - speaking 期间每帧推 onAudioFrame
+ * - RMS < threshold 持续 silenceMs: onUtteranceEnd, 不再推
+ * - 短句过滤: 长度 < minUtteranceMs 视为噪声 (不触发 end)
  */
 export function useVoiceVAD(options: VoiceVADOptions = {}): VoiceVADResult {
   const silenceMs = options.silenceMs ?? DEFAULT_SILENCE_MS;
   const threshold = options.volumeThreshold ?? DEFAULT_VOLUME_THRESHOLD;
   const minUtteranceMs = options.minUtteranceMs ?? DEFAULT_MIN_UTTERANCE_MS;
-  const onUtteranceEnd = options.onUtteranceEnd;
 
   const [listening, setListening] = useState(false);
   const [volume, setVolume] = useState(0);
@@ -95,25 +86,12 @@ export function useVoiceVAD(options: VoiceVADOptions = {}): VoiceVADResult {
   const speakingRef = useRef<boolean>(false);
   const silenceStartRef = useRef<number | null>(null);
   const utteranceStartRef = useRef<number | null>(null);
-  const pcmChunksRef = useRef<Uint8Array[]>([]);
-  const onUtteranceEndRef = useRef(onUtteranceEnd);
+  const preRollRef = useRef<Uint8Array[]>([]);
+  const optionsRef = useRef(options);
 
   useEffect(() => {
-    onUtteranceEndRef.current = onUtteranceEnd;
-  }, [onUtteranceEnd]);
-
-  const flushUtterance = useCallback((): void => {
-    const chunks = pcmChunksRef.current;
-    pcmChunksRef.current = [];
-    const startedAt = utteranceStartRef.current;
-    utteranceStartRef.current = null;
-
-    if (chunks.length === 0 || startedAt === null) return;
-    if (performance.now() - startedAt < minUtteranceMs) return;
-
-    const blob = concatPcmChunks(chunks);
-    onUtteranceEndRef.current?.(blob);
-  }, [minUtteranceMs]);
+    optionsRef.current = options;
+  }, [options]);
 
   const stop = useCallback((): void => {
     workletRef.current?.disconnect();
@@ -131,7 +109,7 @@ export function useVoiceVAD(options: VoiceVADOptions = {}): VoiceVADResult {
     speakingRef.current = false;
     silenceStartRef.current = null;
     utteranceStartRef.current = null;
-    pcmChunksRef.current = [];
+    preRollRef.current = [];
     setListening(false);
     setVolume(0);
   }, []);
@@ -149,7 +127,6 @@ export function useVoiceVAD(options: VoiceVADOptions = {}): VoiceVADResult {
       const AudioCtx =
         window.AudioContext ??
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      // 强制 16k 采样率, 现代浏览器都支持
       const ctx = new AudioCtx({ sampleRate: TARGET_SAMPLE_RATE });
 
       const blob = new Blob([WORKLET_CODE], { type: "application/javascript" });
@@ -170,43 +147,54 @@ export function useVoiceVAD(options: VoiceVADOptions = {}): VoiceVADResult {
       worklet.port.onmessage = (event: MessageEvent<{ samples: Float32Array; rms: number }>) => {
         const { samples, rms } = event.data;
         setVolume(rms);
-
         const now = performance.now();
         const wasSpeaking = speakingRef.current;
+        const pcm = float32ToPcm16(samples);
 
         if (rms > threshold) {
           if (!wasSpeaking) {
             speakingRef.current = true;
             utteranceStartRef.current = now;
-            // 开口时只保留前置缓冲, 清掉静音
-            if (pcmChunksRef.current.length > PRE_ROLL_FRAMES) {
-              pcmChunksRef.current = pcmChunksRef.current.slice(-PRE_ROLL_FRAMES);
+            optionsRef.current.onUtteranceStart?.();
+            // 把前置缓冲帧补送 (防止头部丢字)
+            for (const frame of preRollRef.current) {
+              optionsRef.current.onAudioFrame?.(frame);
             }
+            preRollRef.current = [];
           }
           silenceStartRef.current = null;
+          optionsRef.current.onAudioFrame?.(pcm);
         } else if (wasSpeaking) {
+          // 静音中, 但还在说话状态: 继续推 (尾部静音让阿里云判断断句)
+          optionsRef.current.onAudioFrame?.(pcm);
           if (silenceStartRef.current === null) {
             silenceStartRef.current = now;
           } else if (now - silenceStartRef.current > silenceMs) {
-            flushUtterance();
+            const duration = utteranceStartRef.current
+              ? now - utteranceStartRef.current
+              : 0;
             speakingRef.current = false;
             silenceStartRef.current = null;
+            utteranceStartRef.current = null;
+            if (duration >= minUtteranceMs) {
+              optionsRef.current.onUtteranceEnd?.();
+            }
           }
-        } else if (pcmChunksRef.current.length > PRE_ROLL_FRAMES) {
-          // 静音期间限制 buffer 大小, 只保留最近 PRE_ROLL_FRAMES 帧
-          pcmChunksRef.current = pcmChunksRef.current.slice(-PRE_ROLL_FRAMES);
+        } else {
+          // 没说话, 滚动维护 PRE_ROLL_FRAMES 个最近帧
+          preRollRef.current.push(pcm);
+          if (preRollRef.current.length > PRE_ROLL_FRAMES) {
+            preRollRef.current.shift();
+          }
         }
-
-        pcmChunksRef.current.push(float32ToPcm16(samples));
       };
 
       source.connect(worklet);
-      // 不连 destination, 避免回声 / 自激
     } catch (err) {
       setError(err instanceof Error ? err.message : "麦克风初始化失败");
       stop();
     }
-  }, [silenceMs, threshold, flushUtterance, stop]);
+  }, [silenceMs, threshold, minUtteranceMs, stop]);
 
   useEffect(() => () => stop(), [stop]);
 
