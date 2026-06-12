@@ -3,9 +3,12 @@
 import { useCallback, useState } from "react";
 
 import { VectorStage } from "@/features/art-canvas/components/VectorStage";
+import { CapabilitiesPanel } from "@/features/voice-control/components/CapabilitiesPanel";
 import { QuantumOrb } from "@/features/voice-control/components/QuantumOrb";
 import { StyleMarketPanel } from "@/features/voice-control/components/StyleMarketPanel";
 import { TelemetryHUD } from "@/features/voice-control/components/TelemetryHUD";
+import { useCapabilities } from "@/features/voice-control/hooks/useCapabilities";
+import { useCapabilityToggles } from "@/features/voice-control/hooks/useCapabilityToggles";
 import { useDrawSimulator } from "@/features/voice-control/hooks/useDrawSimulator";
 import { useVoiceVAD } from "@/features/voice-control/hooks/useVoiceVAD";
 import {
@@ -24,6 +27,8 @@ export default function HomePage() {
   const [activeStyleId, setActiveStyleId] = useState<StyleId>(DEFAULT_STYLE_ID);
   const activeStyle = getStyleById(activeStyleId);
   const simulator = useDrawSimulator();
+  const { capabilities, isLoading: capabilitiesLoading } = useCapabilities();
+  const { toggles, setToggle } = useCapabilityToggles();
 
   const handleUtteranceEnd = useCallback((): void => {
     simulator.run(activeStyleId);
@@ -48,6 +53,12 @@ export default function HomePage() {
     >
       <section className="flex flex-col gap-4">
         <StyleMarketPanel activeStyleId={activeStyleId} onActivate={setActiveStyleId} />
+        <CapabilitiesPanel
+          capabilities={capabilities}
+          toggles={toggles}
+          isLoading={capabilitiesLoading}
+          onToggle={setToggle}
+        />
         <div className="grid place-items-center rounded-2xl border border-white/10 bg-black/80 p-6">
           <QuantumOrb
             style={activeStyle}
