@@ -112,7 +112,7 @@ export function ConversationPanel({
         {turns.length === 0 ? (
           <p className="text-xs leading-relaxed" style={{ color: ui.textMuted }}>
             点击下方流体球开始, 说一句话试试: <br />
-            "画三个圆排成一行" / "把最大的换成方块" / "切换到梵高风格" / "清空"
+            「画三个圆排成一行」/「把最大的换成方块」/「切换到梵高风格」/「清空」
           </p>
         ) : (
           turns.map((turn) => (

@@ -160,7 +160,7 @@ async function transcribeOnce(buffer: Buffer, creds: Credentials): Promise<strin
 
   await sr.close();
 
-  console.log(
+  console.warn(
     `[aliyun-nls SR] ${audioStats} events=[${eventLog.join(" | ")}] finalText="${finalText}"`,
   );
 
