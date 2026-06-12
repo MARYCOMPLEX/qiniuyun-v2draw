@@ -82,17 +82,27 @@ void main() {
   color = mix(color, u_color3, noise1 * 0.5 + 0.5);
 
   float mask = smoothstep(0.7, 0.2, dist + noise1 * 0.05);
-  vec3 finalColor = color * glow * mask;
 
-  float r = snoise(p * 1.2 + t * 0.1);
-  finalColor.r += 0.1 * smoothstep(0.5, 0.6, dist + r * 0.05);
+  vec3 finalColor;
+  float finalAlpha;
 
-  // light 主题: 反色 + 整体提亮, 让光晕在亮背景上仍可见
   if (u_lightMode > 0.5) {
-    finalColor = vec3(1.0) - finalColor * 0.7;
+    // light 主题: 不反色, 直接用 palette 深色作为"水墨晕开"
+    // OBSIDIAN palette 已经是深蓝/灰/青, 本身适合亮底; glow 用 log 压幅避免过曝
+    float ink = clamp(glow * 0.18, 0.0, 1.0);
+    // 边缘羽化: 中心更深, 外圈淡出, 像水墨在宣纸上晕开
+    float edge = smoothstep(0.55, 0.05, dist + noise1 * 0.06);
+    finalColor = color * (0.6 + ink * 0.4);
+    finalAlpha = edge * (0.55 + ink * 0.35);
+  } else {
+    // dark 主题: 原配方, 高对比霓虹光晕
+    finalColor = color * glow * mask;
+    float r = snoise(p * 1.2 + t * 0.1);
+    finalColor.r += 0.1 * smoothstep(0.5, 0.6, dist + r * 0.05);
+    finalAlpha = mask * 0.85;
   }
 
-  gl_FragColor = vec4(finalColor, mask * 0.85);
+  gl_FragColor = vec4(finalColor, finalAlpha);
 }`;
 
 const hexToRgb = (hex: string): [number, number, number] => {
