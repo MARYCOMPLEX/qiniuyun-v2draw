@@ -5,6 +5,7 @@ import { MARKET_STYLES, type MarketStyle, type StyleId } from "@/shared/constant
 interface StyleMarketPanelProps {
   readonly activeStyleId: StyleId;
   readonly onActivate: (id: StyleId) => void;
+  readonly activeStyle: MarketStyle;
 }
 
 const isActive = (style: MarketStyle, activeStyleId: StyleId): boolean =>
@@ -12,18 +13,27 @@ const isActive = (style: MarketStyle, activeStyleId: StyleId): boolean =>
 
 /**
  * 风格市场 Floating 面板。
- * Why: 极简列表，单选切换；颜色色块直接来源于注册表，
- * 杜绝 UI 组件复制色值导致的"双信源"漂移。
+ * Why: 极简列表, 单选切换; 颜色色块直接来源于注册表 (杜绝双信源)。
+ * 面板自身 UI 配色读 activeStyle.ui token, 切风格 = 切主题 (Q2=B 决策)。
  */
-export function StyleMarketPanel({ activeStyleId, onActivate }: StyleMarketPanelProps) {
+export function StyleMarketPanel({
+  activeStyleId,
+  onActivate,
+  activeStyle,
+}: StyleMarketPanelProps) {
+  const ui = activeStyle.ui;
   return (
     <section
       aria-label="style-market"
-      className="flex w-full flex-col gap-3 rounded-2xl border border-white/10 bg-black/80 p-4 backdrop-blur"
+      className="flex w-full flex-col gap-3 rounded-2xl border p-4 backdrop-blur-md"
+      style={{ backgroundColor: ui.panelBg, borderColor: ui.panelBorder }}
     >
-      <header className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-white/50">
+      <header
+        className="flex items-center justify-between text-[10px] uppercase tracking-[0.3em]"
+        style={{ color: ui.textMuted }}
+      >
         <span>STYLE MARKET</span>
-        <span className="text-white/30">v2.0</span>
+        <span style={{ opacity: 0.6 }}>v2.0</span>
       </header>
       <ul className="flex flex-col gap-2">
         {MARKET_STYLES.map((style) => {
@@ -34,15 +44,23 @@ export function StyleMarketPanel({ activeStyleId, onActivate }: StyleMarketPanel
                 type="button"
                 onClick={() => onActivate(style.id)}
                 aria-pressed={active}
-                className={`group flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
-                  active
-                    ? "border-white/40 bg-white/10"
-                    : "border-white/10 bg-white/[0.03] hover:border-white/30"
-                }`}
+                className="group flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition"
+                style={{
+                  borderColor: active ? ui.panelBorder : "transparent",
+                  backgroundColor: active
+                    ? ui.mode === "light"
+                      ? "rgba(2,132,199,0.08)"
+                      : "rgba(255,255,255,0.06)"
+                    : "transparent",
+                }}
               >
                 <div className="flex flex-col">
-                  <span className="font-mono text-[12px] text-white">{style.name}</span>
-                  <span className="text-[10px] text-white/50">{style.tagline}</span>
+                  <span className="text-[12px]" style={{ color: ui.textPrimary }}>
+                    {style.name}
+                  </span>
+                  <span className="text-[10px]" style={{ color: ui.textMuted }}>
+                    {style.tagline}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {style.palette.map((c) => (

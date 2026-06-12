@@ -48,18 +48,29 @@ export default function HomePage() {
 
   return (
     <main
-      className="grid h-screen w-screen grid-cols-[280px_1fr_340px] gap-4 p-4"
-      style={{ backgroundColor: activeStyle.background }}
+      className="grid h-screen w-screen grid-cols-[280px_1fr_340px] gap-4 p-4 transition-colors"
+      style={{ backgroundColor: activeStyle.ui.canvasBg }}
     >
       <section className="flex flex-col gap-4">
-        <StyleMarketPanel activeStyleId={activeStyleId} onActivate={setActiveStyleId} />
+        <StyleMarketPanel
+          activeStyleId={activeStyleId}
+          onActivate={setActiveStyleId}
+          activeStyle={activeStyle}
+        />
         <CapabilitiesPanel
           capabilities={capabilities}
           toggles={toggles}
           isLoading={capabilitiesLoading}
           onToggle={setToggle}
+          activeStyle={activeStyle}
         />
-        <div className="grid place-items-center rounded-2xl border border-white/10 bg-black/80 p-6">
+        <div
+          className="grid place-items-center rounded-2xl border p-6 backdrop-blur-md"
+          style={{
+            backgroundColor: activeStyle.ui.panelBg,
+            borderColor: activeStyle.ui.panelBorder,
+          }}
+        >
           <ShaderOrb
             style={activeStyle}
             volume={vad.volume}
@@ -68,7 +79,7 @@ export default function HomePage() {
           />
         </div>
         {vad.error ? (
-          <p className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 font-mono text-[11px] text-red-300">
+          <p className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
             麦克风错误：{vad.error}（已自动启用模拟器流）
           </p>
         ) : null}
@@ -79,10 +90,16 @@ export default function HomePage() {
         className="relative h-full w-full overflow-hidden rounded-2xl"
       >
         <VectorStage instruction={simulator.instruction} background={activeStyle.background} />
-        <p className="pointer-events-none absolute left-4 top-4 font-mono text-[10px] uppercase tracking-[0.3em] text-white/50">
+        <p
+          className="pointer-events-none absolute left-4 top-4 text-[10px] uppercase tracking-[0.3em]"
+          style={{ color: activeStyle.ui.textMuted }}
+        >
           ACTIVE STYLE · {activeStyle.id}
         </p>
-        <p className="pointer-events-none absolute bottom-4 right-4 font-mono text-[10px] text-white/40">
+        <p
+          className="pointer-events-none absolute bottom-4 right-4 text-[10px]"
+          style={{ color: activeStyle.ui.textMuted }}
+        >
           {simulator.streaming ? "STREAMING…" : "STAND BY"}
         </p>
       </section>
