@@ -6,6 +6,19 @@
 
 ---
 
+## 2026-06-12 · 09 · 全 UI 字体替换为得意黑 (Smiley Sans)
+- **上下文**: 想统一品牌字体, 强化赛博朋克斜体氛围。得意黑只有 Oblique 一个字重 (设计为斜体展示字)。
+- **选择**:
+  - **覆盖范围**: A — 全 UI 替换, font-sans 与 font-mono 同时指向得意黑。
+  - **加载方式**: (ii) next/font/local 自托管 woff2, 不依赖外网 CDN。
+- **备选**: B 只替换 sans 保留终端 mono / (i) jsdelivr CDN 节省仓库体积。
+- **影响**:
+  - `public/fonts/SmileySans-Oblique.woff2` 入库 ~1.1MB (OFL-1.1)。
+  - tailwind config sans/mono 双指向 `var(--font-smiley)`, 整个 UI 含 HUD 都带轻微斜度。
+  - fallback 链含 PingFang SC / Microsoft YaHei, 字体加载失败时中文不掉字。
+
+---
+
 ## 2026-06-12 · 08 · Provider 自管错误响应 (PR2 · Q3)
 - **上下文**: `route.ts` 现在手写 `respondError` envelope；`null.ts` 也写一份。错误格式分散两处。
 - **选择**: (ii) Provider 接口直接返回 `LlmStreamResponse`，自带错误响应。路由层零 `try/catch`。
