@@ -11,10 +11,9 @@ export {
   getLlmProvider,
   getLlmProviderById,
   getLlmProviderForRoute,
-  getLlmProviderForToolType,
   type ResolvedLlmCall,
 } from "./llm/registry";
-export { resolveLlmRoute, toolTypeToRoute } from "./llm/route";
+export { resolveLlmRoute } from "./llm/route";
 export { LLM_PROVIDER_IDS } from "./llm/types";
 export type {
   LlmProvider,

@@ -3,7 +3,7 @@ import { buildGoogleFromEnv } from "./google";
 import { buildMistralFromEnv } from "./mistral";
 import { nullLlmProvider } from "./null";
 import { buildOpenAiCompatibleFromEnv } from "./openai-compatible";
-import { resolveLlmRoute, toolTypeToRoute } from "./route";
+import { resolveLlmRoute } from "./route";
 import { LLM_PROVIDER_IDS, type LlmProvider, type LlmProviderId, type LlmToolRoute } from "./types";
 
 type EnvLike = Record<string, string | undefined>;
@@ -34,9 +34,9 @@ export const getLlmProviderById = (
 };
 
 /**
- * 按 toolType 路由解析 Provider + Model (高阶 API)。
- * Why: route.ts 只关心"给我对应这个工具的 Provider 与 model 名",
- * 内部隐藏 toolType → 路由维度 → env 解析的多步逻辑。
+ * 按路由解析 Provider + Model (高阶 API)。
+ * Why: 业务只关心"给我这个路由对应的 Provider 与 model 名",
+ * 内部隐藏路由维度 → env 解析的多步逻辑。
  */
 export interface ResolvedLlmCall {
   provider: LlmProvider;
@@ -57,14 +57,8 @@ export const getLlmProviderForRoute = (
   };
 };
 
-export const getLlmProviderForToolType = (
-  toolType: string | undefined,
-  env: EnvLike = process.env,
-): ResolvedLlmCall => getLlmProviderForRoute(toolTypeToRoute(toolType), env);
-
 /**
- * 默认入口 — 不指定 toolType 时使用 LLM_DEFAULT_*。
- * Why: 保留与 PR1 同名 API, 让现有调用点零改动迁移到 PR2。
+ * 默认入口 — 不指定路由时使用 LLM_DEFAULT_*。
  */
 export const getLlmProvider = (env: EnvLike = process.env): LlmProvider =>
   getLlmProviderForRoute("default", env).provider;

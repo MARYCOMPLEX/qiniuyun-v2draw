@@ -1,64 +1,83 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  COMMAND_TYPE,
   drawToolSchema,
-  isAtomicShape,
-  isDiffusionMelt,
-  isWebSearch,
-  TOOL_TYPE,
+  isClearCanvas,
+  isCreateShapes,
+  isDeleteShape,
+  isModifyShape,
+  isStyleTransform,
 } from "@/shared/types/schema";
 
 describe("drawToolSchema", () => {
-  it("accepts a complete ATOMIC_SHAPE payload", () => {
+  it("接受单条 CREATE_SHAPES envelope", () => {
     const parsed = drawToolSchema.parse({
-      toolType: "ATOMIC_SHAPE",
-      action: "create",
-      shape: "circle",
-      activeStyleId: "SKILL_CYBER_PUNK",
-      useAccentColor: true,
-      position: { x: 1, y: 2 },
-      size: 12,
+      commands: [
+        {
+          commandType: COMMAND_TYPE.CREATE_SHAPES,
+          activeStyleId: "SKILL_CYBER_PUNK",
+          shapes: [
+            {
+              id: "c-1",
+              shape: "circle",
+              position: { x: 100, y: 200 },
+              size: 50,
+              useAccentColor: true,
+            },
+          ],
+        },
+      ],
+      narration: "已生成",
     });
-    expect(isAtomicShape(parsed)).toBe(true);
+    expect(parsed.commands).toHaveLength(1);
+    expect(isCreateShapes(parsed.commands[0]!)).toBe(true);
   });
 
-  it("rejects unknown toolType (discriminator guard)", () => {
-    expect(() =>
-      drawToolSchema.parse({ toolType: "UNKNOWN", refinedPrompt: "x" }),
-    ).toThrow();
+  it("接受 MODIFY/DELETE/CLEAR/STYLE 复合命令", () => {
+    const parsed = drawToolSchema.parse({
+      commands: [
+        { commandType: COMMAND_TYPE.MODIFY_SHAPE, targetId: "c-1", patch: { size: 80 } },
+        { commandType: COMMAND_TYPE.DELETE_SHAPE, targetId: "c-2" },
+        { commandType: COMMAND_TYPE.CLEAR_CANVAS },
+        { commandType: COMMAND_TYPE.STYLE_TRANSFORM, activeStyleId: "SKILL_VAN_GOGH" },
+      ],
+    });
+    expect(parsed.commands).toHaveLength(4);
+    expect(isModifyShape(parsed.commands[0]!)).toBe(true);
+    expect(isDeleteShape(parsed.commands[1]!)).toBe(true);
+    expect(isClearCanvas(parsed.commands[2]!)).toBe(true);
+    expect(isStyleTransform(parsed.commands[3]!)).toBe(true);
   });
 
-  it("rejects negative size on ATOMIC_SHAPE", () => {
+  it("拒绝未知 commandType (discriminator guard)", () => {
     expect(() =>
       drawToolSchema.parse({
-        toolType: "ATOMIC_SHAPE",
-        action: "create",
-        shape: "circle",
-        activeStyleId: "SKILL_CYBER_PUNK",
-        useAccentColor: false,
-        position: { x: 0, y: 0 },
-        size: -1,
+        commands: [{ commandType: "UNKNOWN" }],
       }),
     ).toThrow();
   });
 
-  it("narrows DIFFUSION_MELT and WEB_SEARCH via guards", () => {
-    const diffusion = drawToolSchema.parse({
-      toolType: "DIFFUSION_MELT",
-      refinedPrompt: "starry night neon",
-    });
-    const search = drawToolSchema.parse({
-      toolType: "WEB_SEARCH",
-      searchQuery: "tokyo skyline 8k",
-      targetLayerId: "layer-1",
-    });
-    expect(isDiffusionMelt(diffusion)).toBe(true);
-    expect(isWebSearch(search)).toBe(true);
+  it("拒绝空 commands 数组", () => {
+    expect(() => drawToolSchema.parse({ commands: [] })).toThrow();
   });
 
-  it("exposes TOOL_TYPE constants matching the schema literals", () => {
-    expect(TOOL_TYPE.ATOMIC_SHAPE).toBe("ATOMIC_SHAPE");
-    expect(TOOL_TYPE.DIFFUSION_MELT).toBe("DIFFUSION_MELT");
-    expect(TOOL_TYPE.WEB_SEARCH).toBe("WEB_SEARCH");
+  it("CREATE_SHAPES 缺 shapes 字段直接失败", () => {
+    expect(() =>
+      drawToolSchema.parse({
+        commands: [
+          { commandType: COMMAND_TYPE.CREATE_SHAPES, activeStyleId: "SKILL_CYBER_PUNK" },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it("MODIFY_SHAPE 接受空 patch (不改任何字段也合法)", () => {
+    const parsed = drawToolSchema.parse({
+      commands: [
+        { commandType: COMMAND_TYPE.MODIFY_SHAPE, targetId: "x", patch: {} },
+      ],
+    });
+    expect(isModifyShape(parsed.commands[0]!)).toBe(true);
   });
 });

@@ -3,24 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   getLlmProviderById,
   getLlmProviderForRoute,
-  getLlmProviderForToolType,
   resolveLlmRoute,
-  toolTypeToRoute,
 } from "@/shared/providers";
-import { TOOL_TYPE } from "@/shared/types/schema";
-
-describe("toolTypeToRoute", () => {
-  it("把 SCREAMING_CASE toolType 映射到 kebab-case 路由维度", () => {
-    expect(toolTypeToRoute(TOOL_TYPE.ATOMIC_SHAPE)).toBe("atomic-shape");
-    expect(toolTypeToRoute(TOOL_TYPE.DIFFUSION_MELT)).toBe("diffusion-melt");
-    expect(toolTypeToRoute(TOOL_TYPE.WEB_SEARCH)).toBe("web-search");
-  });
-
-  it("未知或未传入回落到 default", () => {
-    expect(toolTypeToRoute(undefined)).toBe("default");
-    expect(toolTypeToRoute("UNKNOWN")).toBe("default");
-  });
-});
 
 describe("resolveLlmRoute", () => {
   it("无任何 env 时回落到内置兜底 (openai-compatible / gpt-4o-mini)", () => {
@@ -41,7 +25,7 @@ describe("resolveLlmRoute", () => {
     });
   });
 
-  it("toolType 专属配置覆盖 default", () => {
+  it("路由专属配置覆盖 default", () => {
     const env = {
       LLM_DEFAULT_PROVIDER: "anthropic",
       LLM_DEFAULT_MODEL: "claude-haiku-4-5",
@@ -91,7 +75,7 @@ describe("getLlmProviderById", () => {
   });
 });
 
-describe("getLlmProviderForRoute / ForToolType", () => {
+describe("getLlmProviderForRoute", () => {
   it("默认路由解析出兜底 (openai-compatible / gpt-4o-mini)", () => {
     const r = getLlmProviderForRoute("default", {});
     expect(r.providerId).toBe("openai-compatible");
@@ -99,19 +83,7 @@ describe("getLlmProviderForRoute / ForToolType", () => {
     expect(r.provider.id).toBe("openai-compatible");
   });
 
-  it("toolType API 与 route API 等价", () => {
-    const env = {
-      LLM_DEFAULT_PROVIDER: "google",
-      LLM_DEFAULT_MODEL: "gemini-2.0-flash",
-    };
-    const a = getLlmProviderForToolType(TOOL_TYPE.ATOMIC_SHAPE, env);
-    const b = getLlmProviderForRoute("atomic-shape", env);
-    expect(a.providerId).toBe(b.providerId);
-    expect(a.model).toBe(b.model);
-    expect(a.provider.id).toBe(b.provider.id);
-  });
-
-  it("Provider 未配置 key 时 streamDrawTool 返回 503 envelope (Q3=ii Provider 自管错误)", async () => {
+  it("Provider 未配置 key 时 streamDrawTool 返回 503 envelope", async () => {
     const r = getLlmProviderForRoute("default", { LLM_DEFAULT_PROVIDER: "anthropic" });
     expect(r.providerId).toBe("anthropic");
     const response = r.provider

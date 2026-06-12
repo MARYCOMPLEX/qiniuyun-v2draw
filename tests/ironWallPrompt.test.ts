@@ -7,20 +7,34 @@ describe("buildIronWallPrompt", () => {
   const style = getStyleById("SKILL_CYBER_PUNK");
   const prompt = buildIronWallPrompt(style);
 
-  it("locks the activeStyleId twice (header + constraint #3)", () => {
+  it("把当前 activeStyleId 编织进多个位置 (header + constraint + create_shapes 模板)", () => {
     const occurrences = prompt.match(/SKILL_CYBER_PUNK/g) ?? [];
-    expect(occurrences.length).toBeGreaterThanOrEqual(2);
+    expect(occurrences.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("contains all four mandatory negative constraints", () => {
-    expect(prompt).toContain("第一个输出字符必须是 '{'");
-    expect(prompt).toContain("严禁进行任何人类语言的解释");
-    expect(prompt).toContain("唯一死锁");
-    expect(prompt).toContain("默认兜底工具对象");
+  it("包含核心铁律: 严格 JSON / 无 Markdown / 风格死锁 / 兜底降级", () => {
+    expect(prompt).toContain("严格 JSON");
+    expect(prompt).toContain("绝对禁止");
+    expect(prompt).toContain("死锁");
+    expect(prompt).toContain("强制降级");
   });
 
-  it("forbids markdown fence wrapping in the rules", () => {
-    expect(prompt).toContain("绝不能包裹");
+  it("禁止 markdown fence 包裹", () => {
+    expect(prompt).toContain("Markdown");
     expect(prompt).toContain("```json");
+  });
+
+  it("枚举 5 个命令类型", () => {
+    expect(prompt).toContain("CREATE_SHAPES");
+    expect(prompt).toContain("MODIFY_SHAPE");
+    expect(prompt).toContain("DELETE_SHAPE");
+    expect(prompt).toContain("CLEAR_CANVAS");
+    expect(prompt).toContain("STYLE_TRANSFORM");
+  });
+
+  it("提供决策树和示例 (三个圆 / 改方块 / 清空)", () => {
+    expect(prompt).toContain("DECISION TREE");
+    expect(prompt).toContain("EXAMPLES");
+    expect(prompt).toMatch(/三个|3 个/);
   });
 });
