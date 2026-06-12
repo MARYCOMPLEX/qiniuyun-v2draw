@@ -13,7 +13,25 @@ const config: Config = {
         },
       },
       fontFamily: {
-        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        // 全 UI 替换为得意黑 (Q1=A 决策); 任何 font-sans / font-mono 都走同一字体
+        sans: [
+          "var(--font-smiley)",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "PingFang SC",
+          "Hiragino Sans GB",
+          "Microsoft YaHei",
+          "sans-serif",
+        ],
+        mono: [
+          "var(--font-smiley)",
+          "ui-monospace",
+          "SFMono-Regular",
+          "Menlo",
+          "monospace",
+        ],
       },
       keyframes: {
         glitch: {
