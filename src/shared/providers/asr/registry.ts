@@ -1,3 +1,4 @@
+import { aliyunNlsAsrProvider } from "./aliyun-nls";
 import { nullAsrProvider } from "./null";
 import { ASR_PROVIDER_IDS, type AsrProvider, type AsrProviderId } from "./types";
 
@@ -9,10 +10,11 @@ export const getAsrProvider = (env: EnvLike = process.env): AsrProvider => {
     return nullAsrProvider;
   }
   switch (id as AsrProviderId) {
+    case "aliyun-nls":
+      return aliyunNlsAsrProvider;
     case "browser-webspeech":
     case "whisper-openai":
     case "deepgram":
-    case "aliyun-nls":
     case "null":
     default:
       return nullAsrProvider;
