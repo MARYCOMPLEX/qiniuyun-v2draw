@@ -1,0 +1,165 @@
+name: Build & Deploy
+
+on:
+  push:
+    tags: ["dev-*"]
+  workflow_dispatch:
+    inputs:
+      skip_build:
+        description: "Skip build, only redeploy (image must exist in ACR)"
+        type: boolean
+        default: false
+      tag:
+        description: "Image tag to deploy (required when skip_build=true)"
+        type: string
+        default: ""
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: voice-canvas-deploy
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ${{ vars.ALIYUN_REGISTRY }}
+  NAMESPACE: ${{ vars.ALIYUN_NAMESPACE }}
+
+jobs:
+  build:
+    if: ${{ !inputs.skip_build }}
+    runs-on: ubuntu-latest
+    outputs:
+      image_app: ${{ steps.meta.outputs.image_app }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clean stale BuildKit cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache list --json id,key -q '.[] | select(.key | startswith("buildkit-blob-")) | .id' \
+            | xargs -I{} gh cache delete "{}" 2>/dev/null || true
+
+      - name: Set image metadata
+        id: meta
+        run: |
+          TAG="${{ github.event_name == 'workflow_dispatch' && (inputs.tag || 'manual') || github.ref_name }}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_app=${REGISTRY}/${NAMESPACE}/app" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Aliyun Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ALIYUN_USERNAME }}
+          password: ${{ secrets.ALIYUN_PASSWORD }}
+
+      - name: Build and push app image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.image_app }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: [build]
+    if: ${{ always() && (needs.build.result == 'success' || inputs.skip_build) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync infra files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: 22
+          username: deploy
+          key: ${{ secrets.SSH_KEY }}
+          source: "docker-compose.yml"
+          target: "/opt/voice-canvas"
+          strip_components: 0
+          overwrite: true
+
+      - name: Resolve tag and image
+        id: resolve
+        run: |
+          if [ "${{ inputs.skip_build }}" = "true" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${{ needs.build.outputs.tag }}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_app=${REGISTRY}/${NAMESPACE}/app" >> "$GITHUB_OUTPUT"
+
+      - name: Sanitize credentials
+        id: creds
+        env:
+          RAW_USERNAME: ${{ secrets.ALIYUN_USERNAME }}
+          RAW_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
+        run: |
+          echo "username=$(echo "${RAW_USERNAME}" | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+          echo "password=$(echo "${RAW_PASSWORD}" | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: 22
+          username: deploy
+          key: ${{ secrets.SSH_KEY }}
+          envs: IMAGE_APP,TAG,ACR_REGISTRY,ACR_USERNAME,ACR_PASSWORD
+          command_timeout: 10m
+          script: |
+            set -e
+            cd /opt/voice-canvas
+
+            touch .env
+            upsert_env() {
+              key="$1"
+              value="$2"
+              if grep -q "^${key}=" .env; then
+                sed -i "s|^${key}=.*|${key}=${value}|" .env
+              else
+                echo "${key}=${value}" >> .env
+              fi
+            }
+            upsert_env "IMAGE_APP" "${IMAGE_APP}"
+            upsert_env "TAG" "${TAG}"
+
+            echo "=== Login ACR ==="
+            echo "${ACR_PASSWORD}" | docker login --username "${ACR_USERNAME}" --password-stdin "${ACR_REGISTRY}"
+
+            echo "=== Pull new image ==="
+            docker pull ${IMAGE_APP}:${TAG}
+
+            echo "=== Deploy app ==="
+            IMAGE_APP=${IMAGE_APP} TAG=${TAG} \
+              docker compose up -d --force-recreate --remove-orphans app
+
+            echo "=== Health check ==="
+            sleep 8
+            for i in $(seq 1 20); do
+              if curl -fs http://127.0.0.1:3000/api/health > /dev/null 2>&1; then
+                echo "Deployment successful"
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Health check failed after 40s"
+            docker compose logs --tail=80 app
+            exit 1
+        env:
+          IMAGE_APP: ${{ steps.resolve.outputs.image_app }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+          ACR_REGISTRY: ${{ env.REGISTRY }}
+          ACR_USERNAME: ${{ steps.creds.outputs.username }}
+          ACR_PASSWORD: ${{ steps.creds.outputs.password }}
