@@ -56,18 +56,20 @@ describe("detectCapabilities", () => {
     expect(result.asr.provider).toBe("browser-webspeech");
   });
 
-  it("阿里云 NLS 需要 APP_KEY 与 TOKEN 同时齐全", () => {
+  it("阿里云 NLS 需要 AccessKey + AppKey 三件套同时齐全", () => {
     const partial = detectCapabilities({
       ASR_PROVIDER: "aliyun-nls",
       ALIYUN_NLS_APP_KEY: "k",
+      ALIYUN_ACCESS_KEY_ID: "id",
     });
     expect(partial.asr.ready).toBe(false);
-    expect(partial.asr.reason).toContain("ALIYUN_NLS_TOKEN");
+    expect(partial.asr.reason).toContain("ALIYUN_ACCESS_KEY_SECRET");
 
     const full = detectCapabilities({
       ASR_PROVIDER: "aliyun-nls",
       ALIYUN_NLS_APP_KEY: "k",
-      ALIYUN_NLS_TOKEN: "t",
+      ALIYUN_ACCESS_KEY_ID: "id",
+      ALIYUN_ACCESS_KEY_SECRET: "secret",
     });
     expect(full.asr.ready).toBe(true);
   });

@@ -95,7 +95,13 @@ const detectAsr = (env: EnvLike): CapabilitySnapshot => {
     "browser-webspeech": [],
     "whisper-openai": ["OPENAI_API_KEY"],
     deepgram: ["DEEPGRAM_API_KEY"],
-    "aliyun-nls": ["ALIYUN_NLS_APP_KEY", "ALIYUN_NLS_TOKEN"],
+    // 阿里云 NLS Token 由后端用 AccessKey 动态换取并缓存 (aliyun-token.ts),
+    // 不再要求手填 ALIYUN_NLS_TOKEN
+    "aliyun-nls": [
+      "ALIYUN_ACCESS_KEY_ID",
+      "ALIYUN_ACCESS_KEY_SECRET",
+      "ALIYUN_NLS_APP_KEY",
+    ],
   };
   return buildSnapshot(id, requireEnv(env, requirements[id]));
 };
