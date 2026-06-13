@@ -6,6 +6,7 @@ import { useCallback, useRef, useState } from "react";
 import {
   buildFallbackMap,
   dispatchPartialEnvelope,
+  restyleAll,
   type CanvasShape,
   type ShapeMap,
 } from "@/features/art-canvas/utils/toolDispatcher";
@@ -42,6 +43,8 @@ interface DrawStreamAPI extends DrawStreamState {
     options?: DrawStreamRunOptions,
   ) => Promise<void>;
   readonly reset: () => void;
+  /** 用户手动切风格时调用 — 重新解析所有 shape 的 stroke 色 */
+  readonly restyle: (newStyleId: StyleId) => void;
 }
 
 const truncate = (text: string): string =>
@@ -52,12 +55,14 @@ const summarizeShapes = (shapes: ShapeMap): Array<{
   shape: string;
   size: number;
   position: { x: number; y: number };
+  useAccentColor: boolean;
 }> =>
   Array.from(shapes.values()).map((s: CanvasShape) => ({
     id: s.id,
     shape: s.shape,
     size: Math.round(s.size),
     position: { x: Math.round(s.position.x), y: Math.round(s.position.y) },
+    useAccentColor: s.useAccentColor,
   }));
 
 /**
@@ -90,6 +95,17 @@ export function useDrawStream(): DrawStreamAPI {
       pendingStyleSwitch: null,
       error: null,
     });
+  }, []);
+
+  /**
+   * 用户手动切风格时调用 — 重新解析所有 shape 的 stroke 色。
+   * Why: STYLE_TRANSFORM 命令会自动 restyle, 但前端风格卡点击切换不走命令通道,
+   * 需要单独触发一次 restyle 让画布颜色立即跟随新风格的 palette。
+   */
+  const restyle = useCallback((newStyleId: StyleId): void => {
+    const restyled = restyleAll(shapesRef.current, newStyleId);
+    shapesRef.current = restyled;
+    setState((prev) => ({ ...prev, shapes: restyled }));
   }, []);
 
   const run = useCallback(
@@ -212,5 +228,5 @@ export function useDrawStream(): DrawStreamAPI {
     [],
   );
 
-  return { ...state, run, reset };
+  return { ...state, run, reset, restyle };
 }

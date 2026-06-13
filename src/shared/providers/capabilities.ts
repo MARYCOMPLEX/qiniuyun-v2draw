@@ -1,6 +1,5 @@
 import { ASR_PROVIDER_IDS, type AsrProviderId } from "./asr/types";
 import { IMAGE_PROVIDER_IDS, type ImageProviderId } from "./image/types";
-import { LLM_PROVIDER_IDS, type LlmProviderId } from "./llm/types";
 import { SEARCH_PROVIDER_IDS, type SearchProviderId } from "./search/types";
 import { TTS_PROVIDER_IDS, type TtsProviderId } from "./tts/types";
 
@@ -52,18 +51,39 @@ const buildSnapshot = (
 };
 
 const detectLlm = (env: EnvLike): CapabilitySnapshot => {
-  // PR2: env 改为 LLM_DEFAULT_PROVIDER, 兼容历史 LLM_PROVIDER 字段
-  const id = env.LLM_DEFAULT_PROVIDER ?? env.LLM_PROVIDER;
-  if (!isProviderId(LLM_PROVIDER_IDS, id) || id === "null") {
-    return { ready: false, provider: null, reason: "未配置 LLM_DEFAULT_PROVIDER" };
+  // 新模式: 只要有任一 AI key 就 ready (getAIModel 内部检测 provider)
+  // trim 后为空视为未配置
+  const trim = (v: string | undefined) => v?.trim() || undefined;
+  const hasKey =
+    trim(env.OPENAI_API_KEY) ||
+    trim(env.DEEPSEEK_API_KEY) ||
+    trim(env.ANTHROPIC_API_KEY) ||
+    trim(env.GOOGLE_GENERATIVE_AI_API_KEY);
+  if (!hasKey) {
+    const provider = env.LLM_DEFAULT_PROVIDER ?? null;
+    if (provider) {
+      // provider 配了但 key 没配 — 报缺少 key
+      const keyName =
+        provider === "openai-compatible" || provider === "openai"
+          ? "OPENAI_API_KEY"
+          : provider === "anthropic"
+            ? "ANTHROPIC_API_KEY"
+            : provider === "google"
+              ? "GOOGLE_GENERATIVE_AI_API_KEY"
+              : provider === "deepseek"
+                ? "DEEPSEEK_API_KEY"
+                : "API_KEY";
+      return {
+        ready: false,
+        provider,
+        reason: `缺少环境变量: ${keyName}`,
+      };
+    }
+    return { ready: false, provider: null, reason: "未配置任何 LLM API Key" };
   }
-  const requirements: Record<Exclude<LlmProviderId, "null">, string[]> = {
-    "openai-compatible": ["OPENAI_API_KEY"],
-    anthropic: ["ANTHROPIC_API_KEY"],
-    google: ["GOOGLE_GENERATIVE_AI_API_KEY"],
-    mistral: ["MISTRAL_API_KEY"],
-  };
-  return buildSnapshot(id, requireEnv(env, requirements[id]));
+  const provider =
+    env.LLM_DEFAULT_PROVIDER ?? (trim(env.DEEPSEEK_API_KEY) ? "deepseek" : "openai");
+  return { ready: true, provider };
 };
 
 const detectAsr = (env: EnvLike): CapabilitySnapshot => {
@@ -75,7 +95,13 @@ const detectAsr = (env: EnvLike): CapabilitySnapshot => {
     "browser-webspeech": [],
     "whisper-openai": ["OPENAI_API_KEY"],
     deepgram: ["DEEPGRAM_API_KEY"],
-    "aliyun-nls": ["ALIYUN_NLS_APP_KEY", "ALIYUN_NLS_TOKEN"],
+    // 阿里云 NLS Token 由后端用 AccessKey 动态换取并缓存 (aliyun-token.ts),
+    // 不再要求手填 ALIYUN_NLS_TOKEN
+    "aliyun-nls": [
+      "ALIYUN_ACCESS_KEY_ID",
+      "ALIYUN_ACCESS_KEY_SECRET",
+      "ALIYUN_NLS_APP_KEY",
+    ],
   };
   return buildSnapshot(id, requireEnv(env, requirements[id]));
 };
