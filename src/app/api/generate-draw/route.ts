@@ -6,19 +6,18 @@ import {
   getStyleById,
   type StyleId,
 } from "@/shared/constants/marketStyles";
-import { getLlmProviderForRoute } from "@/shared/providers";
-import { drawToolSchema } from "@/shared/types/schema";
+import { streamDrawTool } from "@/shared/providers/llm";
 
 import { buildIronWallPrompt } from "./ironWallPrompt";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 const requestSchema = z.object({
   utterance: z.string().min(1).max(500),
   activeStyleId: z.string().min(1),
   /**
    * 当前画布已有的 shape 列表 — 让 LLM 知道哪些 id 可被 modify/delete。
-   * Why: 多轮对话需要 LLM 看到历史画布状态, 不然"再大一点"无法定位 targetId。
+   * 完整坐标 + 属性 = LLM 的"位置感知"。
    */
   existingShapes: z
     .array(
@@ -27,6 +26,7 @@ const requestSchema = z.object({
         shape: z.string(),
         size: z.number(),
         position: z.object({ x: z.number(), y: z.number() }),
+        useAccentColor: z.boolean().optional(),
       }),
     )
     .optional(),
@@ -48,23 +48,19 @@ export async function POST(request: Request) {
     return respondError("INVALID_PAYLOAD", parsed.error.message, 422);
   }
 
-  const { provider, model } = getLlmProviderForRoute("default");
   const activeStyle = getStyleById(
     (parsed.data.activeStyleId as StyleId) ?? DEFAULT_STYLE_ID,
   );
 
-  const existingSummary =
+  const canvasState =
     parsed.data.existingShapes && parsed.data.existingShapes.length > 0
-      ? `\n\n# CURRENT CANVAS STATE\n${JSON.stringify(parsed.data.existingShapes, null, 2)}`
-      : "\n\n# CURRENT CANVAS STATE\n(empty)";
+      ? JSON.stringify(parsed.data.existingShapes, null, 2)
+      : undefined;
 
-  return provider
-    .streamDrawTool({
-      systemPrompt: buildIronWallPrompt(activeStyle) + existingSummary,
-      userUtterance: parsed.data.utterance,
-      schema: drawToolSchema,
-      model,
-      temperature: 0,
-    })
-    .toTextStreamResponse();
+  return streamDrawTool({
+    systemPrompt: buildIronWallPrompt(activeStyle),
+    userUtterance: parsed.data.utterance,
+    canvasState,
+    temperature: 0,
+  });
 }

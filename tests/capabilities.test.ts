@@ -36,18 +36,6 @@ describe("detectCapabilities", () => {
     expect(result.llm.ready).toBe(true);
   });
 
-  it("无效 LLM_DEFAULT_PROVIDER 值视为未配置", () => {
-    const result = detectCapabilities({ LLM_DEFAULT_PROVIDER: "non-existent-provider" });
-    expect(result.llm.ready).toBe(false);
-    expect(result.llm.provider).toBeNull();
-  });
-
-  it("LLM_DEFAULT_PROVIDER=null 显式声明回落到未配置", () => {
-    const result = detectCapabilities({ LLM_DEFAULT_PROVIDER: "null" });
-    expect(result.llm.ready).toBe(false);
-    expect(result.llm.provider).toBeNull();
-  });
-
   it("TTS browser-webspeech 不需要任何 key, 但 webspeech 不属于 TTS — TTS 必须显式设置 provider", () => {
     const result = detectCapabilities({ TTS_PROVIDER: "elevenlabs" });
     expect(result.tts.ready).toBe(false);

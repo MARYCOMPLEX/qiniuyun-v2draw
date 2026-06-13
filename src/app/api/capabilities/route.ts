@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { detectCapabilities } from "@/shared/providers";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 /**
  * GET /api/capabilities — 暴露当前真实就绪的能力矩阵。

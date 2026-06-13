@@ -1,27 +1,17 @@
 /**
  * Provider Registry 门面 — 对外唯一入口。
- * Why: 业务代码只 import 这一个文件，
- * 内部 llm/asr/tts/image/search 子模块的目录结构演进对外不可见。
  */
 
 export { detectCapabilities } from "./capabilities";
 export type { CapabilityKind, CapabilitySnapshot, CapabilitiesMatrix } from "./capabilities";
 
 export {
-  getLlmProvider,
-  getLlmProviderById,
-  getLlmProviderForRoute,
-  type ResolvedLlmCall,
-} from "./llm/registry";
-export { resolveLlmRoute } from "./llm/route";
-export { LLM_PROVIDER_IDS } from "./llm/types";
-export type {
-  LlmProvider,
-  LlmProviderId,
-  LlmStreamRequest,
-  LlmStreamResponse,
-  LlmToolRoute,
-} from "./llm/types";
+  streamDrawTool,
+  getAIModel,
+  supportsPromptCaching,
+  isSingleSystemProvider,
+} from "./llm";
+export type { StreamDrawRequest, ProviderName } from "./llm";
 
 export { getAsrProvider } from "./asr/registry";
 export { ASR_PROVIDER_IDS } from "./asr/types";
