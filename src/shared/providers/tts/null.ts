@@ -1,4 +1,4 @@
-import type { TtsProvider, TtsSynthesizeRequest, TtsSynthesizeResult } from "./types";
+import type { TtsProvider, TtsStreamHandle, TtsStreamRequest } from "./types";
 
 const NOT_READY = new Error(
   "TTS_NOT_CONFIGURED: 未配置 TTS Provider，无法合成语音。TTS 是可选能力，前端开关应已置灰。",
@@ -6,7 +6,7 @@ const NOT_READY = new Error(
 
 export const nullTtsProvider: TtsProvider = {
   id: "null",
-  async synthesize(_request: TtsSynthesizeRequest): Promise<TtsSynthesizeResult> {
+  async openStream(_request: TtsStreamRequest): Promise<TtsStreamHandle> {
     void _request;
     throw NOT_READY;
   },

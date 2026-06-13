@@ -112,10 +112,9 @@ const detectTts = (env: EnvLike): CapabilitySnapshot => {
     return { ready: false, provider: null, reason: "未配置 TTS_PROVIDER" };
   }
   const requirements: Record<Exclude<TtsProviderId, "null">, string[]> = {
-    openai: ["OPENAI_API_KEY"],
-    elevenlabs: ["ELEVENLABS_API_KEY"],
-    "aliyun-cosyvoice": ["ALIYUN_TTS_APP_KEY", "ALIYUN_TTS_TOKEN"],
-    azure: ["AZURE_TTS_KEY", "AZURE_TTS_REGION"],
+    // Qwen-TTS Realtime 走 DashScope wss, 鉴权直接复用 OPENAI_API_KEY
+    // (DashScope OpenAI 兼容模式与 wss 端点共享同一把 Key)
+    "aliyun-qwen-realtime": ["OPENAI_API_KEY"],
   };
   return buildSnapshot(id, requireEnv(env, requirements[id]));
 };

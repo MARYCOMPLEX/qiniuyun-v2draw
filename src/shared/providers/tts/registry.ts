@@ -1,3 +1,4 @@
+import { createAliyunQwenRealtimeTts } from "./aliyun-qwen-realtime";
 import { nullTtsProvider } from "./null";
 import { TTS_PROVIDER_IDS, type TtsProvider, type TtsProviderId } from "./types";
 
@@ -9,10 +10,14 @@ export const getTtsProvider = (env: EnvLike = process.env): TtsProvider => {
     return nullTtsProvider;
   }
   switch (id as TtsProviderId) {
-    case "openai":
-    case "elevenlabs":
-    case "aliyun-cosyvoice":
-    case "azure":
+    case "aliyun-qwen-realtime": {
+      const apiKey = env.OPENAI_API_KEY;
+      if (!apiKey) return nullTtsProvider;
+      return createAliyunQwenRealtimeTts({
+        apiKey,
+        voice: env.TTS_VOICE,
+      });
+    }
     case "null":
     default:
       return nullTtsProvider;
