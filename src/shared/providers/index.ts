@@ -27,8 +27,9 @@ export { TTS_PROVIDER_IDS } from "./tts/types";
 export type {
   TtsProvider,
   TtsProviderId,
-  TtsSynthesizeRequest,
-  TtsSynthesizeResult,
+  TtsStreamHandle,
+  TtsStreamRequest,
+  TtsAudioFrame,
 } from "./tts/types";
 
 export { getImageProvider } from "./image/registry";

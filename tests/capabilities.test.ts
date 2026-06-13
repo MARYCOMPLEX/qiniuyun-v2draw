@@ -36,18 +36,25 @@ describe("detectCapabilities", () => {
     expect(result.llm.ready).toBe(true);
   });
 
-  it("TTS browser-webspeech 不需要任何 key, 但 webspeech 不属于 TTS — TTS 必须显式设置 provider", () => {
+  it("TTS_PROVIDER 设为已收敛掉的旧 id 视为未配置", () => {
     const result = detectCapabilities({ TTS_PROVIDER: "elevenlabs" });
     expect(result.tts.ready).toBe(false);
-    expect(result.tts.reason).toContain("ELEVENLABS_API_KEY");
+    expect(result.tts.reason).toContain("未配置 TTS_PROVIDER");
   });
 
-  it("TTS_PROVIDER=elevenlabs + ELEVENLABS_API_KEY 齐全时 ready=true", () => {
+  it("TTS_PROVIDER=aliyun-qwen-realtime 缺 OPENAI_API_KEY 时 ready=false", () => {
+    const result = detectCapabilities({ TTS_PROVIDER: "aliyun-qwen-realtime" });
+    expect(result.tts.ready).toBe(false);
+    expect(result.tts.reason).toContain("OPENAI_API_KEY");
+  });
+
+  it("TTS_PROVIDER=aliyun-qwen-realtime + OPENAI_API_KEY 齐全时 ready=true", () => {
     const result = detectCapabilities({
-      TTS_PROVIDER: "elevenlabs",
-      ELEVENLABS_API_KEY: "el-test",
+      TTS_PROVIDER: "aliyun-qwen-realtime",
+      OPENAI_API_KEY: "sk-test",
     });
     expect(result.tts.ready).toBe(true);
+    expect(result.tts.provider).toBe("aliyun-qwen-realtime");
   });
 
   it("ASR browser-webspeech 无需任何 key", () => {
