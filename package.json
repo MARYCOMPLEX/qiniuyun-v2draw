@@ -20,6 +20,7 @@
     "@alicloud/pop-core": "^1.8.0",
     "ai": "^6.0.204",
     "next": "15.1.7",
+    "openai": "^6.42.0",
     "partial-json": "^0.1.7",
     "react": "19.0.0",
     "react-dom": "19.0.0",
