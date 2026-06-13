@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { VectorStage, type VectorStageHandle } from "@/features/art-canvas/components/VectorStage";
 import { CapabilitiesPanel } from "@/features/voice-control/components/CapabilitiesPanel";
@@ -35,6 +35,15 @@ export default function HomePage() {
 
   const [livePartial, setLivePartial] = useState<string>("");
   const [finalUtterance, setFinalUtterance] = useState<string>("");
+  const [showGrid, setShowGrid] = useState<boolean>(false);
+
+  // 用户从风格卡手动切风格时, 让画布所有图元的 stroke 跟随新风格 palette。
+  // Why: STYLE_TRANSFORM 命令链路不走这条 (那是语音切风格), 但 UI 点击需要等价行为。
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+  useEffect(() => {
+    drawRef.current.restyle(activeStyleId);
+  }, [activeStyleId]);
 
   const asrEvents = useMemo(
     () => ({
@@ -141,6 +150,7 @@ export default function HomePage() {
           ref={stageRef}
           shapes={draw.shapes}
           background={activeStyle.background}
+          showGrid={showGrid}
         />
         <p
           className="pointer-events-none absolute left-5 top-5 flex items-center gap-2 text-xs uppercase tracking-[0.3em]"
@@ -158,6 +168,20 @@ export default function HomePage() {
           />
           <span>ACTIVE STYLE · {activeStyle.id}</span>
         </p>
+        <button
+          onClick={() => setShowGrid((v) => !v)}
+          className="absolute right-5 top-5 rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.2em] transition-colors"
+          style={{
+            borderColor: activeStyle.ui.panelBorder,
+            color: showGrid ? activeStyle.accent : activeStyle.ui.textMuted,
+            backgroundColor: showGrid
+              ? `${activeStyle.accent}10`
+              : "transparent",
+          }}
+          title="切换坐标网格 (50px)"
+        >
+          {showGrid ? "GRID ON" : "GRID OFF"}
+        </button>
         <p
           className="pointer-events-none absolute bottom-5 right-5 text-xs"
           style={{ color: activeStyle.ui.textMuted }}

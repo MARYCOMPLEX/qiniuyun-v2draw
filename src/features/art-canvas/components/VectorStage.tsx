@@ -7,6 +7,7 @@ import type { CanvasShape, ShapeMap } from "../utils/toolDispatcher";
 interface VectorStageProps {
   readonly shapes: ShapeMap;
   readonly background: string;
+  readonly showGrid?: boolean;
 }
 
 export interface VectorStageHandle {
@@ -21,8 +22,39 @@ interface RenderEntry {
 }
 
 const LERP_FACTOR = 0.12;
+const GRID_STEP = 50;
 const lerp = (current: number, target: number): number =>
   current + (target - current) * LERP_FACTOR;
+
+const drawGrid = (
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void => {
+  ctx.save();
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+  ctx.beginPath();
+  for (let x = GRID_STEP; x < width; x += GRID_STEP) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+  }
+  for (let y = GRID_STEP; y < height; y += GRID_STEP) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+  }
+  ctx.stroke();
+  // 中心十字 (480, 320 是约定中心, 但实际居中按 canvas 大小)
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+  ctx.beginPath();
+  ctx.moveTo(width / 2 - 20, height / 2);
+  ctx.lineTo(width / 2 + 20, height / 2);
+  ctx.moveTo(width / 2, height / 2 - 20);
+  ctx.lineTo(width / 2, height / 2 + 20);
+  ctx.stroke();
+  ctx.restore();
+};
 
 const drawShape = (
   ctx: CanvasRenderingContext2D,
@@ -54,10 +86,15 @@ const drawShape = (
  * captureSnapshot 通过 ref 暴露, 用于截图反馈回路 (Path 1 MVP)。
  */
 export const VectorStage = forwardRef<VectorStageHandle, VectorStageProps>(
-  function VectorStage({ shapes, background }, ref) {
+  function VectorStage({ shapes, background, showGrid = false }, ref) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const entriesRef = useRef<Map<string, RenderEntry>>(new Map());
     const shapesRef = useRef<ShapeMap>(shapes);
+    const showGridRef = useRef<boolean>(showGrid);
+
+    useEffect(() => {
+      showGridRef.current = showGrid;
+    }, [showGrid]);
 
     useImperativeHandle(
       ref,
@@ -120,6 +157,10 @@ export const VectorStage = forwardRef<VectorStageHandle, VectorStageProps>(
       const tick = (): void => {
         ctx.fillStyle = background;
         ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+        if (showGridRef.current) {
+          drawGrid(ctx, canvas.clientWidth, canvas.clientHeight);
+        }
 
         for (const entry of entriesRef.current.values()) {
           entry.current.x = lerp(entry.current.x, entry.target.x);
