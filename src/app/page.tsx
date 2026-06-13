@@ -11,6 +11,7 @@ import { useCapabilities } from "@/features/voice-control/hooks/useCapabilities"
 import { useCapabilityToggles } from "@/features/voice-control/hooks/useCapabilityToggles";
 import { useDrawStream } from "@/features/voice-control/hooks/useDrawStream";
 import { useRealtimeAsr } from "@/features/voice-control/hooks/useRealtimeAsr";
+import { useTtsStream } from "@/features/voice-control/hooks/useTtsStream";
 import { useVoiceVAD } from "@/features/voice-control/hooks/useVoiceVAD";
 import {
   DEFAULT_STYLE_ID,
@@ -27,6 +28,7 @@ export default function HomePage() {
   const [activeStyleId, setActiveStyleId] = useState<StyleId>(DEFAULT_STYLE_ID);
   const activeStyle = getStyleById(activeStyleId);
   const draw = useDrawStream();
+  const tts = useTtsStream();
   const { capabilities, isLoading: capabilitiesLoading } = useCapabilities();
   const { toggles, setToggle } = useCapabilityToggles();
   const stageRef = useRef<VectorStageHandle | null>(null);
@@ -44,6 +46,25 @@ export default function HomePage() {
   useEffect(() => {
     drawRef.current.restyle(activeStyleId);
   }, [activeStyleId]);
+
+  // narration 落定后给智能体配音 — 仅当 TTS 开关开启且能力就绪。
+  // Why: 用 useEffect 监听 turns 状态机 done 跃迁, 避免在流式期间反复触发;
+  // ref 解耦让 capabilities/toggles 变化不打断当前播放。
+  const ttsActiveRef = useRef<boolean>(false);
+  ttsActiveRef.current = toggles.tts && capabilities.tts.ready;
+  const ttsSpeakRef = useRef(tts.speak);
+  ttsSpeakRef.current = tts.speak;
+  const lastSpokenTurnRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ttsActiveRef.current) return;
+    const lastDone = [...draw.turns].reverse().find((t) => t.status === "done");
+    if (!lastDone) return;
+    if (lastSpokenTurnRef.current === lastDone.id) return;
+    const narration = lastDone.narration.trim();
+    if (!narration) return;
+    lastSpokenTurnRef.current = lastDone.id;
+    void ttsSpeakRef.current(narration);
+  }, [draw.turns]);
 
   const asrEvents = useMemo(
     () => ({
@@ -138,6 +159,11 @@ export default function HomePage() {
         {draw.error ? (
           <p className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
             画图: {draw.error}
+          </p>
+        ) : null}
+        {tts.error ? (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">
+            TTS: {tts.error}
           </p>
         ) : null}
       </section>
