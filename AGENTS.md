@@ -245,6 +245,60 @@
 
 涉及鉴权 / 支付 / 用户数据 / 加密 / 文件上传 / SQL 拼接的改动，必须额外触发 `security-reviewer` agent，并在 PR 中附审查结论。
 
+### 5.7 链式 PR 合并规范
+
+> 大功能拆成 PR0 → PR1 → PR2 → PR3，PR(N+1) 的 base 指向 PR(N) 的 head 分支时，合并顺序与分支生命周期管理直接决定能否平滑合入。本节规则来自 2026-06-13 TTS 链路合并踩坑（详见下方"踩坑案例"）。
+
+#### 5.7.1 创建阶段
+
+- 链式 PR 的 base 链必须**单调指向更外层**（PR1.base = main，PR2.base = PR1.head，依此类推）
+- 每个 PR 独立可编译、可测，**不依赖未合并的兄弟 PR 改动**
+- PR 描述里显式写明依赖关系（"必须先合 #N 再合本 PR"）
+
+#### 5.7.2 合并阶段（核心约束）
+
+**强制顺序：从最外层（base=main）开始合，逐层向内。**
+
+| 阶段 | 操作 | 关键参数 |
+|---|---|---|
+| 合 PR(N) | `gh pr merge <N> --squash` | **不带** `--delete-branch` |
+| PR(N+1) 改 base | `gh pr edit <N+1> --base main` | head 分支仍存活，可正常改 |
+| 推进到 PR(N+1) | rebase 解冲突 + force-with-lease 推 + 合 | 同上 |
+| 全部合完后 | 批量删远端分支 | `git push origin --delete <branch>` |
+
+**禁止：合并时带 `--delete-branch`**。会触发以下连锁反应：
+1. 被合 PR 的 head 分支删除
+2. 该分支同时是下一个 PR 的 base 分支 → github 自动关闭下一个 PR
+3. **github 不允许 reopen base 已删除的 PR**，且**不允许给已关闭 PR 改 base**
+4. 唯一恢复路径：重建 PR（PR 编号变更，review 历史断裂）
+
+#### 5.7.3 冲突处理
+
+合 PR(N) 后 PR(N+1) 会跟 main 产生冲突（PR(N) 的 commit 已上游）：
+
+```bash
+git checkout <pr-n+1-branch>
+git fetch origin main
+git rebase origin/main
+# git 自动识别"内容已 upstream"会跳过；其他冲突需手工解
+git push --force-with-lease origin <pr-n+1-branch>
+```
+
+`--force-with-lease` 优于 `--force` —— 仅在远端没人改过时覆盖，与 `0. 总则` 的"不破坏现状"一致。
+
+#### 5.7.4 踩坑案例（2026-06-13）
+
+TTS 链路 4 个 PR（#7 → #8 → #9 → #10），合并 #7 时使用 `gh pr merge --squash --delete-branch`，导致：
+- #8 base 分支 `chore/9-env-cleanup` 被删 → #8 自动关闭 → 无法 reopen → 重建为 #11
+- 合并 #11 时再次 `--delete-branch` → #9 自动关闭 → 重建为 #12
+- 4 个 PR 的合并过程产生 2 个僵尸 PR，污染 PR 列表
+
+**正确流程应是**：
+1. 合 #7（不删分支）
+2. `gh pr edit 8 --base main` → rebase #8 → 合 #8（不删分支）
+3. 依此类推到 #10
+4. 全部合完后：`git push origin --delete chore/9-env-cleanup feat/9-tts-provider feat/9-tts-api-route feat/9-tts-narration-playback`
+
 ---
 
 ## 6. Agent 协作规范
@@ -306,6 +360,6 @@
 
 ---
 
-> 最后更新：2026-06-12
+> 最后更新：2026-06-14
 > 维护者：架构组
 > 反馈：在 `docs/agents-feedback.md` 提交建议
