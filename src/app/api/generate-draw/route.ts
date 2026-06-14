@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  DEFAULT_STYLE_ID,
-  getStyleById,
-  type StyleId,
-} from "@/shared/constants/marketStyles";
 import { streamDrawTool } from "@/shared/providers/llm";
 
 import { buildCanvasState } from "./canvasState";
@@ -23,7 +18,6 @@ const messageSchema = z.object({
 
 const requestSchema = z.object({
   utterance: z.string().min(1).max(500),
-  activeStyleId: z.string().min(1),
   /**
    * 最近 N 轮历史 (user + assistant narration), 不含本轮 utterance。
    * 客户端 orchestrator 从 turns 里拼; 服务端只做长度截断。
@@ -67,14 +61,10 @@ export async function POST(request: Request) {
     return respondError("INVALID_PAYLOAD", parsed.error.message, 422);
   }
 
-  const activeStyle = getStyleById(
-    (parsed.data.activeStyleId as StyleId) ?? DEFAULT_STYLE_ID,
-  );
-
   const canvasState = buildCanvasState(parsed.data);
 
   return streamDrawTool({
-    systemPrompt: buildDirectorPrompt(activeStyle),
+    systemPrompt: buildDirectorPrompt(),
     userUtterance: parsed.data.utterance,
     canvasState,
     history: parsed.data.history,

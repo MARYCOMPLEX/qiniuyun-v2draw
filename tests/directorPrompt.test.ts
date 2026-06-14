@@ -1,15 +1,23 @@
 import { describe, expect, it } from "vitest";
 
 import { buildDirectorPrompt } from "@/app/api/generate-draw/directorPrompt";
-import { getStyleById } from "@/shared/constants/marketStyles";
 
-describe("buildDirectorPrompt (drawio + canvas + platform 31 工具)", () => {
-  const style = getStyleById("SKILL_CYBER_PUNK");
-  const prompt = buildDirectorPrompt(style);
+describe("buildDirectorPrompt (drawio + canvas + platform 30 工具)", () => {
+  const prompt = buildDirectorPrompt();
 
-  it("锁定当前 activeStyleId 至少 2 处 (header + 风格后缀)", () => {
-    const occurrences = prompt.match(/SKILL_CYBER_PUNK/g) ?? [];
-    expect(occurrences.length).toBeGreaterThanOrEqual(2);
+  it("不再注入 activeStyleId / 风格后缀模板 (跟 style market 解耦)", () => {
+    expect(prompt).not.toContain("activeStyleId=");
+    expect(prompt).not.toContain("# CURRENT STYLE");
+    expect(prompt).not.toMatch(/SKILL_CYBER_PUNK.*cyberpunk neon/);
+    expect(prompt).not.toMatch(/SKILL_VAN_GOGH.*van gogh/);
+    expect(prompt).not.toMatch(/SKILL_OBSIDIAN.*minimalist/);
+  });
+
+  it("仍然告诉 LLM 主题切换走 platform.set_theme 工具", () => {
+    expect(prompt).toContain("platform.set_theme");
+    expect(prompt).toContain("SKILL_CYBER_PUNK");
+    expect(prompt).toContain("SKILL_VAN_GOGH");
+    expect(prompt).toContain("SKILL_OBSIDIAN");
   });
 
   it("声明 drawio 3 工具命名空间", () => {
@@ -65,10 +73,10 @@ describe("buildDirectorPrompt (drawio + canvas + platform 31 工具)", () => {
     expect(prompt).toContain("矩形");
   });
 
-  it("3 个风格的 prompt 后缀建议都齐全", () => {
-    expect(prompt).toContain("cyberpunk neon");
-    expect(prompt).toContain("van gogh oil painting");
-    expect(prompt).toContain("dark obsidian");
+  it("不再含 3 个风格的英文 prompt 后缀模板 (跟 LLM 解耦)", () => {
+    expect(prompt).not.toContain("cyberpunk neon");
+    expect(prompt).not.toContain("van gogh oil painting");
+    expect(prompt).not.toContain("dark obsidian");
   });
 
   it("含 mxCell id 规则 (从 2 开始, 0/1 是 root)", () => {
