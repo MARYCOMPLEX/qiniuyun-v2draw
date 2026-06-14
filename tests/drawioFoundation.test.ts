@@ -6,9 +6,7 @@ import {
   isDisplayDiagram,
   isEditDiagram,
   isAppendDiagram,
-  isGetShapeLibrary,
   isDrawioTool,
-  SHAPE_LIBRARIES,
 } from "@/shared/types/drawio-tools";
 import {
   isMxCellXmlComplete,
@@ -46,34 +44,27 @@ describe("drawio-tools schema", () => {
     expect(isAppendDiagram(cmd)).toBe(true);
   });
 
-  it("接受 get_shape_library 查 aws4", () => {
-    const cmd = drawioCommandSchema.parse({
-      tool: DRAWIO_TOOL.GET_SHAPE_LIBRARY,
-      library: "aws4",
-    });
-    expect(isGetShapeLibrary(cmd)).toBe(true);
-  });
-
-  it("拒绝未知 library 名", () => {
+  it("拒绝已废弃的 get_shape_library 工具", () => {
     expect(() =>
       drawioCommandSchema.parse({
-        tool: DRAWIO_TOOL.GET_SHAPE_LIBRARY,
-        library: "non-existent",
+        tool: "drawio.get_shape_library",
+        library: "aws4",
       }),
     ).toThrow();
+  });
+
+  it("DRAWIO_TOOL 不再导出 GET_SHAPE_LIBRARY", () => {
+    expect(Object.values(DRAWIO_TOOL)).toEqual([
+      "drawio.display_diagram",
+      "drawio.edit_diagram",
+      "drawio.append_diagram",
+    ]);
   });
 
   it("isDrawioTool 命名空间守卫", () => {
     expect(isDrawioTool("drawio.display_diagram")).toBe(true);
     expect(isDrawioTool("canvas.generate_image")).toBe(false);
     expect(isDrawioTool("platform.set_theme")).toBe(false);
-  });
-
-  it("SHAPE_LIBRARIES 至少包含基础 4 个", () => {
-    expect(SHAPE_LIBRARIES).toContain("flowchart");
-    expect(SHAPE_LIBRARIES).toContain("basic");
-    expect(SHAPE_LIBRARIES).toContain("aws4");
-    expect(SHAPE_LIBRARIES).toContain("kubernetes");
   });
 });
 

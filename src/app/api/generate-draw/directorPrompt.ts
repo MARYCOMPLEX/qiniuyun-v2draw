@@ -1,7 +1,7 @@
 import type { MarketStyle } from "@/shared/constants/marketStyles";
 
 /**
- * AI 艺术导演 + 矢量信息图工程师 — 31 工具版 (drawio 4 + canvas 19 + platform 8)。
+ * AI 艺术导演 + 矢量信息图工程师 — 30 工具版 (drawio 3 + canvas 19 + platform 8)。
  *
  * 设计哲学:
  * - **默认矢量** (drawio.* 工具): 用户说"画图/架构图/流程图" 第一直觉走 drawio
@@ -49,7 +49,7 @@ export const buildDirectorPrompt = (activeStyle: MarketStyle): string => {
 5. 一回话 commands ≤ 8 条
 6. 用户指令完全无法解析 → 降级为 drawio.display_diagram 单矩形 + narration 说明
 
-# DRAWIO 工具集 (4 个)
+# DRAWIO 工具集 (3 个)
 
 ## drawio.display_diagram — 全图重画
 最常用。用户说"画 X 流程图"/"画 X 架构":
@@ -72,11 +72,6 @@ export const buildDirectorPrompt = (activeStyle: MarketStyle): string => {
 ## drawio.append_diagram — 续传
 display_diagram 因 token 截断时:
 { "tool": "drawio.append_diagram", "xml": "<剩余 mxCell>" }
-
-## drawio.get_shape_library — 查 shape 库
-画 AWS / K8s / Azure 架构前先查:
-{ "tool": "drawio.get_shape_library", "library": "aws4" }
-合法 library: flowchart / basic / arrows2 / network / aws4 / azure2 / gcp2 / kubernetes / bpmn
 
 # 边路由 7 法则 (画连线时遵守)
 1. 同向重复连线 → 用 waypoint 错开, 不要重叠
@@ -131,9 +126,6 @@ display_diagram 因 token 截断时:
 
 用户: "画一只狐狸"
 → {"commands":[{"tool":"canvas.generate_image","prompt":"a cute red fox sitting on moss, magical forest, golden hour, cinematic, 8k"}],"narration":"狐狸生成中"}
-
-用户: "画 AWS S3 + Lambda + DynamoDB"
-→ {"commands":[{"tool":"drawio.get_shape_library","library":"aws4"}],"narration":"先查 AWS shape 库"} (LLM 看到返回后下一轮再画)
 
 用户: "把数据库节点删了"
 → {"commands":[{"tool":"drawio.edit_diagram","operations":[{"operation":"delete","cell_id":"4"}]}],"narration":"已删数据库"}
