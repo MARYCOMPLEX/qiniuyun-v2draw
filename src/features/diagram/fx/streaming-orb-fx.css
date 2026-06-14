@@ -1,0 +1,126 @@
+/**
+ * StreamingOrbFx 样式 — fluid plasma orb 占位特效。
+ *
+ * 关键技巧:
+ * - position absolute 让组件叠在 canvas 上, pointer-events: none 完全不挡操作
+ * - SVG goo filter 通过 wrapper.style.filter 启用 (URL 引用 inline svg 内的 <defs>)
+ * - mix-blend-mode: screen 让 3 个 blob 融合 + 跟暗色画布有正确叠加
+ * - thinking 节奏 1.0~1.4s 周期, 给 "AI 正在思考" 的强信号
+ *
+ * 颜色取项目 dark theme 的 cyan/blue 谱系, 跟 SVG 引擎 background #0f172a 协调。
+ */
+
+.streaming-orb-fx {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 28px;
+  pointer-events: none;
+  z-index: 5;
+  /* 半透明遮罩, 让画布内容隐隐可见但弱化 */
+  background: radial-gradient(
+    ellipse at center,
+    rgba(15, 23, 42, 0.45) 0%,
+    rgba(15, 23, 42, 0.15) 60%,
+    transparent 100%
+  );
+  animation: streaming-orb-fx-fade-in 320ms ease-out;
+}
+
+@keyframes streaming-orb-fx-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.streaming-orb-fx__svg-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.streaming-orb-fx__wrapper {
+  position: relative;
+  width: var(--orb-size);
+  height: var(--orb-size);
+  will-change: transform;
+}
+
+.streaming-orb-fx__core {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--core-size);
+  height: var(--core-size);
+  margin-top: calc(var(--core-size) / -2);
+  margin-left: calc(var(--core-size) / -2);
+  background: radial-gradient(
+    circle,
+    #ffffff 30%,
+    rgba(255, 255, 255, 0.7) 70%
+  );
+  border-radius: 50%;
+  z-index: 2;
+  transform: scale(0.78);
+  box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.85);
+}
+
+.streaming-orb-fx__blob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--core-size);
+  height: var(--core-size);
+  margin-top: calc(var(--core-size) / -2);
+  margin-left: calc(var(--core-size) / -2);
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  opacity: 0.92;
+}
+
+.streaming-orb-fx__blob--1 {
+  background: #4f46e5;
+  animation: streaming-orb-think-1 1.2s infinite ease-in-out;
+}
+
+.streaming-orb-fx__blob--2 {
+  background: #00f2fe;
+  animation: streaming-orb-think-2 1.4s infinite ease-in-out;
+}
+
+.streaming-orb-fx__blob--3 {
+  background: #4facfe;
+  animation: streaming-orb-think-3 1s infinite ease-in-out;
+}
+
+@keyframes streaming-orb-think-1 {
+  0%, 100% { transform: translate(-15px, -15px) scale(1); }
+  50% { transform: translate(15px, 15px) scale(1.3); }
+}
+
+@keyframes streaming-orb-think-2 {
+  0%, 100% { transform: translate(15px, -15px) scale(1.2); }
+  50% { transform: translate(-15px, 15px) scale(0.9); }
+}
+
+@keyframes streaming-orb-think-3 {
+  0%, 100% { transform: translate(0px, 20px) scale(0.8); }
+  50% { transform: translate(0px, -20px) scale(1.2); }
+}
+
+.streaming-orb-fx__hint {
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  color: rgba(241, 245, 249, 0.85);
+  text-transform: uppercase;
+  font-weight: 500;
+  text-shadow: 0 0 12px rgba(0, 242, 254, 0.45);
+  animation: streaming-orb-fx-hint-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes streaming-orb-fx-hint-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
