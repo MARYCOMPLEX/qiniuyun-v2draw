@@ -87,6 +87,14 @@ export const drawioCommandSchema = z.discriminatedUnion("tool", [
   getShapeLibraryCmd,
 ]);
 
+/** 单条 drawio 命令的内部 cmd schemas — 给统一 union 拼接用 */
+export const drawioCommandSchemas = {
+  displayDiagramCmd,
+  editDiagramCmd,
+  appendDiagramCmd,
+  getShapeLibraryCmd,
+} as const;
+
 export type DrawioCommand = z.infer<typeof drawioCommandSchema>;
 export type DisplayDiagramCommand = z.infer<typeof displayDiagramCmd>;
 export type EditDiagramCommand = z.infer<typeof editDiagramCmd>;
