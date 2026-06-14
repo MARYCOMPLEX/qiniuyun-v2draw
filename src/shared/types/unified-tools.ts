@@ -11,6 +11,7 @@
 import { z } from "zod";
 
 import { canvasCommandSchema } from "./canvas-tools";
+import { diagramCommandSchema } from "./diagram-tools";
 import { drawioCommandSchema } from "./drawio-tools";
 
 /**
@@ -20,6 +21,7 @@ import { drawioCommandSchema } from "./drawio-tools";
 export const unifiedCommandSchema = z.union([
   canvasCommandSchema,
   drawioCommandSchema,
+  diagramCommandSchema,
 ]);
 
 export const unifiedEnvelopeSchema = z.object({

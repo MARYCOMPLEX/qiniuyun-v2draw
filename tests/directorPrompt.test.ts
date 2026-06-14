@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildDirectorPrompt } from "@/app/api/generate-draw/directorPrompt";
 
-describe("buildDirectorPrompt (drawio + canvas + platform 30 工具)", () => {
+describe("buildDirectorPrompt (diagram.* SVG-first + canvas + platform)", () => {
   const prompt = buildDirectorPrompt();
 
   it("不再注入 activeStyleId / 风格后缀模板 (跟 style market 解耦)", () => {
@@ -20,10 +20,10 @@ describe("buildDirectorPrompt (drawio + canvas + platform 30 工具)", () => {
     expect(prompt).toContain("SKILL_OBSIDIAN");
   });
 
-  it("声明 drawio 3 工具命名空间", () => {
-    expect(prompt).toContain("drawio.display_diagram");
-    expect(prompt).toContain("drawio.edit_diagram");
-    expect(prompt).toContain("drawio.append_diagram");
+  it("声明 diagram 3 工具命名空间 (SVG-first)", () => {
+    expect(prompt).toContain("diagram.display");
+    expect(prompt).toContain("diagram.edit");
+    expect(prompt).toContain("diagram.append");
   });
 
   it("不再声明已废弃的 get_shape_library 工具", () => {
@@ -58,9 +58,9 @@ describe("buildDirectorPrompt (drawio + canvas + platform 30 工具)", () => {
     expect(prompt).toContain("撤销");
   });
 
-  it("包含矢量画图的边路由 7 法则", () => {
-    expect(prompt).toContain("边路由 7 法则");
-    expect(prompt).toContain("waypoint");
+  it("包含 SVG 连线指南", () => {
+    expect(prompt).toContain("连线指南");
+    expect(prompt).toContain("marker-end");
   });
 
   it("强制 JSON / 禁止 Markdown 等核心约束", () => {
@@ -79,11 +79,11 @@ describe("buildDirectorPrompt (drawio + canvas + platform 30 工具)", () => {
     expect(prompt).not.toContain("dark obsidian");
   });
 
-  it("含 mxCell id 规则 (从 2 开始, 0/1 是 root)", () => {
-    expect(prompt).toContain("从 2 开始");
+  it("含 SVG id 规则 (可编辑元素包在 <g id=\"X\"> 内)", () => {
+    expect(prompt).toContain('<g id="');
   });
 
-  it("含图像作为 mxCell 的混合用例说明", () => {
-    expect(prompt).toContain("image mxCell");
+  it("含图像注入 SVG 的混合用例说明", () => {
+    expect(prompt).toContain("<image>");
   });
 });

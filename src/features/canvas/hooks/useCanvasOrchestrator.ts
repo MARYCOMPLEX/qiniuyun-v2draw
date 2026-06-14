@@ -7,7 +7,13 @@ import {
   applyDisplayDiagram,
   applyEditDiagram,
 } from "@/features/diagram/dispatchers/drawio-dispatcher";
+import {
+  applyAppendSvg,
+  applyDisplaySvg,
+  applyEditSvg,
+} from "@/features/diagram/dispatchers/svg-dispatcher";
 import { isMxCellXmlComplete } from "@/features/diagram/utils/mxCellUtils";
+import { isSvgComplete } from "@/features/diagram/utils/svgUtils";
 import { buildImageMxCell } from "@/features/diagram/utils/imageMxCell";
 import {
   isDrawioTool,
@@ -15,6 +21,12 @@ import {
   type DrawioCommand,
   type EditDiagramCommand,
 } from "@/shared/types/drawio-tools";
+import {
+  isDiagramTool,
+  DIAGRAM_TOOL,
+  type DiagramCommand,
+  type EditSvgCommand,
+} from "@/shared/types/diagram-tools";
 import {
   applyUndo,
   dispatchSyncCommand,
@@ -72,7 +84,7 @@ export interface UseCanvasOrchestratorResult extends CanvasOrchestratorState {
   /** 用户说一句话 → 调 LLM → 流式分发命令 */
   readonly run: (utterance: string) => Promise<void>;
   readonly reset: () => void;
-  /** 切换会话时灌入历史 turns (不影响 layers / image cell, 那些已经包在 chartXML 里) */
+  /** 灌入历史 turns (会话恢复) */
   readonly hydrate: (turns: ReadonlyArray<ConversationTurn>) => void;
 }
 
@@ -239,11 +251,37 @@ export function useCanvasOrchestrator(
    * 异步命令会立即 fetch, 不等结果 (jobId 通过 SSE 反向通知)。
    */
   const applyCommand = useCallback(
-    async (command: CanvasCommand | DrawioCommand): Promise<void> => {
+    async (command: CanvasCommand | DrawioCommand | DiagramCommand): Promise<void> => {
       const summary = buildActionSummary(
         command.tool,
         command as unknown as Record<string, unknown>,
       );
+
+      // diagram.* → 走 SVG dispatcher
+      if (isDiagramTool(command.tool)) {
+        const dispatch = diagramDispatchRef.current;
+        if (!dispatch) {
+          console.warn("[orchestrator] diagram command but no diagramDispatch:", command.tool);
+          return;
+        }
+        const diagramCmd = command as DiagramCommand;
+        switch (diagramCmd.tool) {
+          case "diagram.display":
+            applyDisplaySvg(diagramCmd, dispatch);
+            break;
+          case "diagram.edit":
+            applyEditSvg(diagramCmd, dispatch);
+            break;
+          case "diagram.append":
+            applyAppendSvg(diagramCmd, dispatch);
+            break;
+        }
+        patchCurrentTurn((t) => ({
+          ...t,
+          actions: [...t.actions, { tool: command.tool, summary, status: "done" }],
+        }));
+        return;
+      }
 
       // drawio.* → 走 diagram dispatcher
       if (isDrawioTool(command.tool)) {
@@ -470,7 +508,7 @@ export function useCanvasOrchestrator(
             appliedCommandIdsRef.current.add(fingerprint);
             // 进入 executing 状态
             patchCurrentTurn((t) => ({ ...t, status: "executing" }));
-            await applyCommand(cmd as CanvasCommand | DrawioCommand);
+            await applyCommand(cmd as CanvasCommand | DrawioCommand | DiagramCommand);
           }
 
           if (partial.narration) {
@@ -512,12 +550,6 @@ export function useCanvasOrchestrator(
     currentTurnIdRef.current = null;
   }, []);
 
-  /**
-   * 切换会话时灌入历史 turns — 重置 turn 状态机, 把 turns 列表替换为持久化版本。
-   *
-   * 不灌 layers / history (image layer 数据没存 DB; history undo 不跨会话保留)。
-   * narration 取最后一个 turn 的 narration 作为 latestNarration (TTS 不重读, lastSpokenRef 隔离)。
-   */
   const hydrate = useCallback(
     (incomingTurns: ReadonlyArray<ConversationTurn>): void => {
       abortRef.current?.abort();
@@ -560,6 +592,28 @@ function isCommandComplete(cmd: { tool?: string; [k: string]: unknown }): boolea
   if (!cmd.tool) return false;
   if (cmd.tool === CANVAS_TOOL.CLEAR_CANVAS) return true;
   if (typeof cmd.tool !== "string") return false;
+
+  // diagram.* SVG 工具完整性校验
+  if (cmd.tool === "diagram.display" || cmd.tool === "diagram.append") {
+    if (typeof cmd.svg !== "string" || cmd.svg.length === 0) return false;
+    return isSvgComplete(cmd.svg);
+  }
+  if (cmd.tool === "diagram.edit") {
+    if (!Array.isArray(cmd.operations) || cmd.operations.length === 0) return false;
+    for (const op of cmd.operations) {
+      if (!op || typeof op !== "object") return false;
+      const operation = (op as { operation?: unknown }).operation;
+      const elementId = (op as { element_id?: unknown }).element_id;
+      const newSvg = (op as { new_svg?: unknown }).new_svg;
+      if (operation !== "update" && operation !== "add" && operation !== "delete") return false;
+      if (typeof elementId !== "string" || elementId.length === 0) return false;
+      if (operation !== "delete") {
+        if (typeof newSvg !== "string" || newSvg.length === 0) return false;
+      }
+    }
+    return true;
+  }
+
   // drawio.* 字段独立校验, 优先级最高
   if (cmd.tool === "drawio.display_diagram" || cmd.tool === "drawio.append_diagram") {
     if (typeof cmd.xml !== "string" || cmd.xml.length === 0) return false;
