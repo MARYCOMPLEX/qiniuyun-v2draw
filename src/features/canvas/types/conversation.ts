@@ -117,3 +117,31 @@ export const buildActionSummary = (
 
 const truncate = (s: string, max: number): string =>
   s.length > max ? `${s.slice(0, max - 1)}…` : s;
+
+/**
+ * 把已完成的 turns 拍成 LLM 多轮上下文 messages。
+ *
+ * - 只取最近 maxTurns 个 turn (按时间顺序保留尾部)
+ * - 跳过 streaming 中或 narration 为空的 turn (没有有效 assistant 回复)
+ * - assistant 内容只用 narration; actions 摘要不发, 省 token
+ */
+export interface HistoryMessage {
+  readonly role: "user" | "assistant";
+  readonly content: string;
+}
+
+export function buildHistoryMessages(
+  turns: ReadonlyArray<ConversationTurn>,
+  maxTurns: number,
+): ReadonlyArray<HistoryMessage> {
+  if (maxTurns <= 0) return [];
+  const recent = turns.slice(-maxTurns);
+  const messages: HistoryMessage[] = [];
+  for (const turn of recent) {
+    if (!turn.userUtterance.trim()) continue;
+    if (!turn.narration || !turn.narration.trim()) continue;
+    messages.push({ role: "user", content: turn.userUtterance });
+    messages.push({ role: "assistant", content: turn.narration });
+  }
+  return messages;
+}

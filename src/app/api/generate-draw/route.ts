@@ -12,9 +12,21 @@ import { buildDirectorPrompt } from "./directorPrompt";
 
 export const runtime = "nodejs";
 
+const HISTORY_MAX_TURNS = 5;
+
+const messageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().min(1).max(2_000),
+});
+
 const requestSchema = z.object({
   utterance: z.string().min(1).max(500),
   activeStyleId: z.string().min(1),
+  /**
+   * 最近 N 轮历史 (user + assistant narration), 不含本轮 utterance。
+   * 客户端 orchestrator 从 turns 里拼; 服务端只做长度截断。
+   */
+  history: z.array(messageSchema).max(HISTORY_MAX_TURNS * 2).optional(),
   /**
    * 当前画布已有的 shape 列表 — 让 LLM 知道哪些 id 可被 modify/delete。
    * 完整坐标 + 属性 = LLM 的"位置感知"。
@@ -61,6 +73,7 @@ export async function POST(request: Request) {
     systemPrompt: buildDirectorPrompt(activeStyle),
     userUtterance: parsed.data.utterance,
     canvasState,
+    history: parsed.data.history,
     temperature: 0,
   });
 }

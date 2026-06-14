@@ -24,6 +24,7 @@ import { useJobStream, type JobDoneEvent, type JobFailedEvent } from "./useJobSt
 import {
   allocateTurnId,
   buildActionSummary,
+  buildHistoryMessages,
   type AgentAction,
   type ConversationTurn,
 } from "../types/conversation";
@@ -74,6 +75,7 @@ export interface UseCanvasOrchestratorResult extends CanvasOrchestratorState {
 }
 
 const HISTORY_MAX = 50;
+const CONTEXT_MAX_TURNS = 5;
 
 /**
  * 多模态画布主编排器 — 唯一的命令落地点。
@@ -416,12 +418,14 @@ export function useCanvasOrchestrator(
       setTurns((prev) => [...prev, newTurn]);
 
       try {
+        const history = buildHistoryMessages(turnsRef.current, CONTEXT_MAX_TURNS);
         const response = await fetch("/api/generate-draw", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             utterance,
             activeStyleId: activeStyleIdRef.current,
+            history,
             existingShapes: Array.from(layersRef.current.values()).map((l) => ({
               id: l.id,
               shape: "image",
