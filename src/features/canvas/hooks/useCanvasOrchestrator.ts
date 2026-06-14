@@ -7,6 +7,7 @@ import {
   applyDisplayDiagram,
   applyEditDiagram,
 } from "@/features/diagram/dispatchers/drawio-dispatcher";
+import { isMxCellXmlComplete } from "@/features/diagram/utils/mxCellUtils";
 import { buildImageMxCell } from "@/features/diagram/utils/imageMxCell";
 import {
   isDrawioTool,
@@ -456,7 +457,9 @@ export function useCanvasOrchestrator(
           for (let i = 0; i < partial.commands.length; i++) {
             const cmd = partial.commands[i];
             if (!cmd?.tool) continue;
-            const fingerprint = `${i}:${JSON.stringify(cmd)}`;
+            // fingerprint: 同一 index + 同一 tool 视为同一条命令, 不论后续字段如何补全。
+            // Why: partial 流式中字段渐进增长, 不能用 JSON.stringify 当指纹 (每帧都不一样)。
+            const fingerprint = `${i}:${cmd.tool}`;
             if (appliedCommandIdsRef.current.has(fingerprint)) continue;
             // 只应用看起来"完整"的命令 — 字段够齐全
             if (!isCommandComplete(cmd)) continue;
@@ -533,7 +536,9 @@ function isCommandComplete(cmd: { tool?: string; [k: string]: unknown }): boolea
   if (typeof cmd.tool !== "string") return false;
   // drawio.* 字段独立校验, 优先级最高
   if (cmd.tool === "drawio.display_diagram" || cmd.tool === "drawio.append_diagram") {
-    return typeof cmd.xml === "string" && cmd.xml.length > 0;
+    if (typeof cmd.xml !== "string" || cmd.xml.length === 0) return false;
+    // ★ 关键: xml 还在流式累加时不应用, 等最后一个 mxCell 闭合再 dispatch
+    return isMxCellXmlComplete(cmd.xml);
   }
   if (cmd.tool === "drawio.edit_diagram") {
     return Array.isArray(cmd.operations) && cmd.operations.length > 0;
