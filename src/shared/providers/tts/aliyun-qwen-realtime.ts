@@ -140,7 +140,7 @@ const openQwenTtsStream = async (
         type: "session.update",
         session: {
           voice: opts.voice ?? DEFAULT_VOICE,
-          response_format: "pcm_24000hz_mono_16bit",
+          response_format: "pcm",
           mode: "server_commit",
         },
       }),
