@@ -187,10 +187,7 @@ function HomeContent() {
         aria-label="canvas-stage"
         className="relative h-full w-full overflow-hidden rounded-2xl"
       >
-        <DrawIoStage
-          drawioUi={activeStyle.ui.mode === "light" ? "min" : "dark"}
-          darkMode={activeStyle.ui.mode !== "light"}
-        />
+        <DrawIoStage darkMode={activeStyle.ui.mode !== "light"} />
         <p
           className="pointer-events-none absolute left-5 top-5 flex items-center gap-2 text-xs uppercase tracking-[0.3em]"
           style={{ color: activeStyle.ui.textMuted }}
