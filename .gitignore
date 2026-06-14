@@ -73,6 +73,9 @@ pnpm-lock.yaml.bak
 # Local task instructions (not for repo)
 instructions.md
 
+# Claude Code local cache (per-machine, not for repo)
+.claude/
+
 # Local SQLite database (sessions / turns)
 data/
 *.db
