@@ -72,6 +72,8 @@ export interface UseCanvasOrchestratorResult extends CanvasOrchestratorState {
   /** 用户说一句话 → 调 LLM → 流式分发命令 */
   readonly run: (utterance: string) => Promise<void>;
   readonly reset: () => void;
+  /** 切换会话时灌入历史 turns (不影响 layers / image cell, 那些已经包在 chartXML 里) */
+  readonly hydrate: (turns: ReadonlyArray<ConversationTurn>) => void;
 }
 
 const HISTORY_MAX = 50;
@@ -510,7 +512,29 @@ export function useCanvasOrchestrator(
     currentTurnIdRef.current = null;
   }, []);
 
-  return { layers, history, turns, streaming, latestNarration, error, run, reset };
+  /**
+   * 切换会话时灌入历史 turns — 重置 turn 状态机, 把 turns 列表替换为持久化版本。
+   *
+   * 不灌 layers / history (image layer 数据没存 DB; history undo 不跨会话保留)。
+   * narration 取最后一个 turn 的 narration 作为 latestNarration (TTS 不重读, lastSpokenRef 隔离)。
+   */
+  const hydrate = useCallback(
+    (incomingTurns: ReadonlyArray<ConversationTurn>): void => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setLayers(new Map());
+      setHistory([]);
+      setTurns([...incomingTurns]);
+      setStreaming(false);
+      const last = incomingTurns[incomingTurns.length - 1];
+      setLatestNarration(last?.narration ?? null);
+      setError(null);
+      currentTurnIdRef.current = null;
+    },
+    [],
+  );
+
+  return { layers, history, turns, streaming, latestNarration, error, run, reset, hydrate };
 }
 
 // 工具: 判断 canvas tool 是否异步

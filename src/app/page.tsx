@@ -8,6 +8,8 @@ import { DrawIoStage } from "@/features/diagram/components/DrawIoStage";
 import { DiagramProvider, useDiagram } from "@/features/diagram/contexts/DiagramContext";
 import { CanvasMarquee } from "@/features/diagram/fx/CanvasMarquee";
 import { StreamingOrbFx } from "@/features/diagram/fx/StreamingOrbFx";
+import { SessionHistoryPanel } from "@/features/sessions/components/SessionHistoryPanel";
+import { useSessionStore } from "@/features/sessions/hooks/useSessionStore";
 import { usePlatformState } from "@/features/platform/usePlatformState";
 import { CapabilitiesPanel } from "@/features/voice-control/components/CapabilitiesPanel";
 import { ShaderOrb } from "@/features/voice-control/components/ShaderOrb";
@@ -62,6 +64,28 @@ function HomeContent() {
       loadDiagram: diagram.loadDiagram,
     },
   });
+
+  const canvasRef = useRef(canvas);
+  canvasRef.current = canvas;
+  const diagramRef = useRef(diagram);
+  diagramRef.current = diagram;
+
+  /**
+   * 会话持久化 — 启动拉列表 / 切换 / 新建 / 删除 / autosave。
+   * 切换会话时调 onActivate 灌 chartXML 到 DiagramContext + 灌 turns 到 orchestrator。
+   */
+  const sessionStore = useSessionStore({
+    onActivate: (snapshot) => {
+      // 灌历史 turns 到 orchestrator (重置当前进行中的状态)
+      canvasRef.current.hydrate(snapshot.turns as never);
+      // 灌 chartXML 到 DiagramContext (空字符串 = 清空画布)
+      if (snapshot.chartXML && snapshot.chartXML.trim()) {
+        diagramRef.current.loadDiagram(snapshot.chartXML);
+      } else {
+        diagramRef.current.clearDiagram();
+      }
+    },
+  });
   const tts = useTtsStream();
   const { capabilities, isLoading: capabilitiesLoading } = useCapabilities();
   const { toggles, setToggle } = useCapabilityToggles();
@@ -85,9 +109,6 @@ function HomeContent() {
     lastSpokenRef.current = narration;
     void ttsSpeakRef.current(narration);
   }, [canvas.streaming, canvas.latestNarration]);
-
-  const canvasRef = useRef(canvas);
-  canvasRef.current = canvas;
 
   const asrEvents = useMemo(
     () => ({
@@ -143,6 +164,42 @@ function HomeContent() {
 
   // (移除旧 hudLogs — 改用 canvas.turns 直接喂给 AgentConversationPanel)
 
+  /**
+   * Autosave chartXML — diagram.chartXML 变化时 PATCH 到当前会话。
+   * 节流: 仅在落定 (非 streaming) 时回写, 流式中间帧不持久化。
+   */
+  const sessionStoreRef = useRef(sessionStore);
+  sessionStoreRef.current = sessionStore;
+  useEffect(() => {
+    if (canvas.streaming) return;
+    if (!sessionStoreRef.current.activeSessionId) return;
+    if (!diagram.chartXML.trim()) return;
+    void sessionStoreRef.current.syncChartXML(diagram.chartXML);
+  }, [canvas.streaming, diagram.chartXML]);
+
+  /**
+   * Autosave turns — turn 状态变化时 upsert 到当前会话。
+   * 落定 (done/failed) 时回写一次, 保证刷新后能看到完整 conversation。
+   */
+  useEffect(() => {
+    if (!sessionStoreRef.current.activeSessionId) return;
+    const turns = canvas.turns;
+    if (turns.length === 0) return;
+    const last = turns[turns.length - 1];
+    if (!last) return;
+    if (last.status === "streaming" || last.status === "executing") return;
+    void sessionStoreRef.current.syncTurn({
+      id: last.id,
+      sessionId: sessionStoreRef.current.activeSessionId,
+      turnIndex: last.turnIndex,
+      userUtterance: last.userUtterance,
+      narration: last.narration,
+      actions: last.actions,
+      status: last.status,
+      createdAt: last.timestamp,
+    });
+  }, [canvas.turns]);
+
   const transcriptToShow = livePartial || finalUtterance;
 
   /**
@@ -171,6 +228,17 @@ function HomeContent() {
           isLoading={capabilitiesLoading}
           onToggle={setToggle}
           activeStyle={activeStyle}
+        />
+        <SessionHistoryPanel
+          sessions={sessionStore.sessions}
+          activeSessionId={sessionStore.activeSessionId}
+          loading={sessionStore.loading}
+          error={sessionStore.error}
+          activeStyle={activeStyle}
+          onActivate={(id) => void sessionStore.activateSession(id)}
+          onCreate={() => void sessionStore.createNewSession()}
+          onDelete={(id) => void sessionStore.deleteSession(id)}
+          onRename={(id, title) => void sessionStore.renameSession(id, title)}
         />
         {vad.error ? (
           <p className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
