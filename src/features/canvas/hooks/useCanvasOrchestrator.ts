@@ -259,9 +259,6 @@ export function useCanvasOrchestrator(
           case "drawio.append_diagram":
             applyAppendDiagram(drawioCmd, dispatch);
             break;
-          case "drawio.get_shape_library":
-            // 服务端 tool execute 已直接返回内容给 LLM, 客户端无操作
-            break;
         }
         patchCurrentTurn((t) => ({
           ...t,
@@ -542,9 +539,6 @@ function isCommandComplete(cmd: { tool?: string; [k: string]: unknown }): boolea
   }
   if (cmd.tool === "drawio.edit_diagram") {
     return Array.isArray(cmd.operations) && cmd.operations.length > 0;
-  }
-  if (cmd.tool === "drawio.get_shape_library") {
-    return typeof cmd.library === "string";
   }
   // 大部分命令都有 prompt 或 targetLayerId
   if ("prompt" in cmd) return typeof cmd.prompt === "string" && cmd.prompt.length > 0;

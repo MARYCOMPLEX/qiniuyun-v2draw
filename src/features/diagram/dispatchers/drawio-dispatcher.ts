@@ -1,15 +1,10 @@
 /**
- * drawio 4 工具 dispatcher — 把 LLM 流式命令应用到 DiagramContext。
+ * drawio 3 工具 dispatcher — 把 LLM 流式命令应用到 DiagramContext。
  *
  * 设计要点 (借鉴 next-ai-draw-io/hooks/use-diagram-tool-handlers.ts):
  * - display_diagram: 全图替换, wrapWithMxFile + loadDiagram
  * - edit_diagram: ID 操作, 解析当前 chartXML 后逐条 update/add/delete
  * - append_diagram: 续传, 累加到当前 chartXML 末尾
- * - get_shape_library: 读取 docs/shape-libraries/{name}.md, 返回内容字符串
- *
- * 服务端 dispatcher (get_shape_library) 跟客户端 dispatcher (display/edit/append) 分开:
- * - 服务端: 通过 LLM tool execute 直接读文件返回
- * - 客户端: 通过 useDiagramOrchestrator 应用到 DOM
  */
 
 import {

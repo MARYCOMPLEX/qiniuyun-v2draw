@@ -12,11 +12,15 @@ describe("buildDirectorPrompt (drawio + canvas + platform 31 工具)", () => {
     expect(occurrences.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("声明 drawio 4 工具命名空间", () => {
+  it("声明 drawio 3 工具命名空间", () => {
     expect(prompt).toContain("drawio.display_diagram");
     expect(prompt).toContain("drawio.edit_diagram");
     expect(prompt).toContain("drawio.append_diagram");
-    expect(prompt).toContain("drawio.get_shape_library");
+  });
+
+  it("不再声明已废弃的 get_shape_library 工具", () => {
+    expect(prompt).not.toContain("drawio.get_shape_library");
+    expect(prompt).not.toContain("get_shape_library");
   });
 
   it("声明 canvas 图像工具命名空间", () => {
@@ -33,9 +37,9 @@ describe("buildDirectorPrompt (drawio + canvas + platform 31 工具)", () => {
     expect(prompt).toMatch(/主语.*动作.*环境.*风格.*光线.*镜头/);
   });
 
-  it("包含 8 个调用示例 (8 个 → 用户:)", () => {
+  it("包含 7 个调用示例 (7 个 → 用户:)", () => {
     const examples = prompt.match(/用户:/g) ?? [];
-    expect(examples.length).toBeGreaterThanOrEqual(8);
+    expect(examples.length).toBeGreaterThanOrEqual(7);
   });
 
   it("包含决策树 8 个分支 (复合/矢量/编辑/生图/图编辑/风格/视口/撤销)", () => {
