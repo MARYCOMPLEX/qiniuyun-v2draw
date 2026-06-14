@@ -40,9 +40,10 @@ export function applyDisplayDiagram(
   ctx: DispatchContext,
   options?: { isStreaming?: boolean },
 ): void {
+  const rawXml = command.xml ?? "";
   const sourceXml = options?.isStreaming
-    ? extractCompleteMxCells(command.xml)
-    : command.xml;
+    ? extractCompleteMxCells(rawXml)
+    : rawXml;
   if (!sourceXml.trim()) return;
   const fullXml = wrapWithMxFile(sourceXml);
   ctx.loadDiagram(fullXml);
@@ -62,7 +63,7 @@ export function applyEditDiagram(
   command: EditDiagramCommand,
   ctx: DispatchContext,
 ): void {
-  let xml = ctx.chartXML;
+  let xml = ctx.chartXML ?? "";
   if (!xml.trim()) {
     // 画布空, edit 退化为 display (取 add 操作的 new_xml)
     const adds = command.operations
@@ -87,14 +88,16 @@ export function applyAppendDiagram(
   command: AppendDiagramCommand,
   ctx: DispatchContext,
 ): void {
-  if (!ctx.chartXML.trim()) {
-    ctx.loadDiagram(wrapWithMxFile(command.xml));
+  const rawXml = command.xml ?? "";
+  const chartXml = ctx.chartXML ?? "";
+  if (!chartXml.trim()) {
+    ctx.loadDiagram(wrapWithMxFile(rawXml));
     return;
   }
   // 提取当前 root 内容 + 追加新 mxCell
-  const currentNodes = extractCellsFromMxFile(ctx.chartXML);
-  const merged = `${currentNodes}\n${command.xml}`;
-  ctx.loadDiagram(replaceNodes(ctx.chartXML, merged));
+  const currentNodes = extractCellsFromMxFile(chartXml);
+  const merged = `${currentNodes}\n${rawXml}`;
+  ctx.loadDiagram(replaceNodes(chartXml, merged));
 }
 
 // ─── 内部工具函数 ────────────────────────────
