@@ -7,9 +7,12 @@ import {
   applyDisplayDiagram,
   applyEditDiagram,
 } from "@/features/diagram/dispatchers/drawio-dispatcher";
+import { buildImageMxCell } from "@/features/diagram/utils/imageMxCell";
 import {
   isDrawioTool,
+  DRAWIO_TOOL,
   type DrawioCommand,
+  type EditDiagramCommand,
 } from "@/shared/types/drawio-tools";
 import {
   applyUndo,
@@ -163,11 +166,12 @@ export function useCanvasOrchestrator(
   // SSE 监听:job-done 替换图, job-failed 标记失败
   useJobStream({
     onDone: (event: JobDoneEvent) => {
+      const layerSnapshotRef: { value: ImageLayer | null } = { value: null };
       setLayers((prev) => {
         const target = prev.get(event.layerId);
         if (!target) return prev;
         const next = new Map(prev);
-        next.set(event.layerId, {
+        const updated: ImageLayer = {
           ...target,
           status: "done",
           imageUrl: event.imageUrl,
@@ -176,10 +180,36 @@ export function useCanvasOrchestrator(
           seed: event.seed,
           jobId: event.jobId,
           completedAt: Date.now(),
-        });
+        };
+        next.set(event.layerId, updated);
+        layerSnapshotRef.value = updated;
         return next;
       });
       patchActionByLayerId(event.layerId, "done");
+
+      // ★ 把生成的图注入 drawio 画布 (作 image mxCell)
+      const dispatch = diagramDispatchRef.current;
+      const snap = layerSnapshotRef.value;
+      if (dispatch && snap) {
+        const mxCellXml = buildImageMxCell({
+          id: snap.id,
+          imageUrl: event.imageUrl,
+          position: snap.position,
+          size: snap.size,
+          aspectLocked: true,
+        });
+        const editCmd: EditDiagramCommand = {
+          tool: DRAWIO_TOOL.EDIT_DIAGRAM,
+          operations: [
+            {
+              operation: "add",
+              cell_id: snap.id,
+              new_xml: mxCellXml,
+            },
+          ],
+        };
+        applyEditDiagram(editCmd, dispatch);
+      }
     },
     onFailed: (event: JobFailedEvent) => {
       setLayers((prev) => {
