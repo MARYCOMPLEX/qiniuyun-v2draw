@@ -11,7 +11,10 @@ export const getTtsProvider = (env: EnvLike = process.env): TtsProvider => {
   }
   switch (id as TtsProviderId) {
     case "aliyun-qwen-realtime": {
-      const apiKey = env.OPENAI_API_KEY;
+      // Qwen TTS 走 DashScope wss, 优先用独立 DASHSCOPE_API_KEY,
+      // 兼容历史: 如果没设, 退到 OPENAI_API_KEY (旧版本 OPENAI_API_KEY 直连 DashScope)。
+      // 当用户切换 LLM provider 后 OPENAI_API_KEY 不再是 DashScope key, 这时必须配 DASHSCOPE_API_KEY。
+      const apiKey = env.DASHSCOPE_API_KEY ?? env.OPENAI_API_KEY;
       if (!apiKey) return nullTtsProvider;
       return createAliyunQwenRealtimeTts({
         apiKey,

@@ -111,12 +111,20 @@ const detectTts = (env: EnvLike): CapabilitySnapshot => {
   if (!isProviderId(TTS_PROVIDER_IDS, id) || id === "null") {
     return { ready: false, provider: null, reason: "未配置 TTS_PROVIDER" };
   }
-  const requirements: Record<Exclude<TtsProviderId, "null">, string[]> = {
-    // Qwen-TTS Realtime 走 DashScope wss, 鉴权直接复用 OPENAI_API_KEY
-    // (DashScope OpenAI 兼容模式与 wss 端点共享同一把 Key)
-    "aliyun-qwen-realtime": ["OPENAI_API_KEY"],
-  };
-  return buildSnapshot(id, requireEnv(env, requirements[id]));
+  if (id === "aliyun-qwen-realtime") {
+    // 优先 DASHSCOPE_API_KEY, fallback OPENAI_API_KEY (历史兼容)
+    const trim = (v: string | undefined) => v?.trim() || undefined;
+    const hasKey = trim(env.DASHSCOPE_API_KEY) || trim(env.OPENAI_API_KEY);
+    if (!hasKey) {
+      return {
+        ready: false,
+        provider: id,
+        reason: "缺少环境变量: DASHSCOPE_API_KEY (或 fallback OPENAI_API_KEY)",
+      };
+    }
+    return { ready: true, provider: id };
+  }
+  return { ready: false, provider: id, reason: "未知 TTS provider" };
 };
 
 const detectImage = (env: EnvLike): CapabilitySnapshot => {
