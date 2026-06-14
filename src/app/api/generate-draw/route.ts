@@ -8,7 +8,7 @@ import {
 } from "@/shared/constants/marketStyles";
 import { streamDrawTool } from "@/shared/providers/llm";
 
-import { buildIronWallPrompt } from "./ironWallPrompt";
+import { buildDirectorPrompt } from "./directorPrompt";
 
 export const runtime = "nodejs";
 
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       : undefined;
 
   return streamDrawTool({
-    systemPrompt: buildIronWallPrompt(activeStyle),
+    systemPrompt: buildDirectorPrompt(activeStyle),
     userUtterance: parsed.data.utterance,
     canvasState,
     temperature: 0,
