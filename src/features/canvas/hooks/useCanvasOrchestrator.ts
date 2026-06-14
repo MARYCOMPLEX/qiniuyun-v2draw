@@ -422,7 +422,6 @@ export function useCanvasOrchestrator(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             utterance,
-            activeStyleId: activeStyleIdRef.current,
             history,
             chartXML,
             existingShapes: Array.from(layersRef.current.values()).map((l) => ({

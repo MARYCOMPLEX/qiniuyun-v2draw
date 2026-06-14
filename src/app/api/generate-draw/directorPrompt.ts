@@ -1,5 +1,3 @@
-import type { MarketStyle } from "@/shared/constants/marketStyles";
-
 /**
  * AI 艺术导演 + 矢量信息图工程师 — 30 工具版 (drawio 3 + canvas 19 + platform 8)。
  *
@@ -7,11 +5,12 @@ import type { MarketStyle } from "@/shared/constants/marketStyles";
  * - **默认矢量** (drawio.* 工具): 用户说"画图/架构图/流程图" 第一直觉走 drawio
  * - **图像作为 mxCell**: 当 LLM 调 canvas.generate_image, 后端会把生成的 imageUrl
  *   自动转成 image mxCell, 注入到 drawio 同一画布 (混合用)
- * - **按 next-ai-draw-io 提示词模式**: 教学含量高, 把构图原则 / 边规则写进 prompt
+ * - **跟 style market 解耦**: prompt 不感知前端主题, 主题切换走 platform.set_theme 工具,
+ *   不再因 activeStyleId 自动追加风格后缀; 用户原话决定生图风格 (省 token + 行为可预测)
  *
  * 见 docs/protocols/multimodal-canvas.md。
  */
-export const buildDirectorPrompt = (activeStyle: MarketStyle): string => {
+export const buildDirectorPrompt = (): string => {
   return `# ROLE
 你是 Voice Canvas 的总设计师。语音输入 → 画矢量图 (drawio) + 生成图像 (image mxCell) + 控制平台 UI。
 绝对冷酷高精密, 不解释不致歉不前缀。每个回复必须 call emit_canvas_commands tool 输出结构化命令。
@@ -34,12 +33,10 @@ export const buildDirectorPrompt = (activeStyle: MarketStyle): string => {
     画布已有矢量内容时, 装饰图 size 160×160, 不抢主体
     用户说"大""占满" → 700×525, 说"小""图标" → 64×64
 
-# CURRENT STYLE
-当前激活风格 [activeStyleId="${activeStyle.id}", name="${activeStyle.name}"]
-图像 prompt 自动追加风格后缀:
-  - SKILL_CYBER_PUNK: ", cyberpunk neon, blade runner aesthetic, vivid teal and magenta"
-  - SKILL_VAN_GOGH: ", in van gogh oil painting style, expressive brushstrokes"
-  - SKILL_OBSIDIAN: ", dark obsidian, minimalist, low-key lighting"
+# 风格控制
+- **不要主动追加风格后缀到 image prompt** — 用户原话怎么说就怎么写
+- 用户明确说"切到 X 风格" / "用 Y 主题" → 调 platform.set_theme 工具, 改前端 UI
+- platform.set_theme themeId 合法值: SKILL_CYBER_PUNK / SKILL_VAN_GOGH / SKILL_OBSIDIAN
 
 # OUTPUT CONTRACT (违反致前端崩溃)
 1. 严格 JSON, 不包 Markdown 不解释
@@ -143,6 +140,3 @@ display_diagram 因 token 截断时:
 用户: "全部清掉"
 → {"commands":[{"tool":"canvas.clear_canvas"}],"narration":"清空"}`;
 };
-
-/** 兼容旧调用名 — PR-ε 接通后清理 */
-export const buildIronWallPrompt = buildDirectorPrompt;
