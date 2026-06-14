@@ -1,7 +1,7 @@
 import { streamText } from "ai";
 
 import { getAIModel } from "./ai-providers";
-import { canvasEnvelopeSchema } from "@/shared/types/canvas-tools";
+import { unifiedEnvelopeSchema } from "@/shared/types/unified-tools";
 
 export interface StreamDrawRequest {
   systemPrompt: string;
@@ -35,8 +35,8 @@ export function streamDrawToolAsTextStream(request: StreamDrawRequest): Response
     tools: {
       emit_canvas_commands: {
         description:
-          "Emit a structured canvas envelope with one or more commands (canvas.* business tools or platform.* platform tools) plus a brief narration.",
-        inputSchema: canvasEnvelopeSchema,
+          "Emit a structured envelope with one or more commands (drawio.* vector tools, canvas.* image tools, platform.* UI tools) plus a brief narration.",
+        inputSchema: unifiedEnvelopeSchema,
       },
     },
     onError({ error }) {

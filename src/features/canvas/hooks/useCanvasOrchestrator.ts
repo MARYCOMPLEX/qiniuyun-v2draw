@@ -3,6 +3,15 @@
 import { useCallback, useRef, useState } from "react";
 
 import {
+  applyAppendDiagram,
+  applyDisplayDiagram,
+  applyEditDiagram,
+} from "@/features/diagram/dispatchers/drawio-dispatcher";
+import {
+  isDrawioTool,
+  type DrawioCommand,
+} from "@/shared/types/drawio-tools";
+import {
   applyUndo,
   dispatchSyncCommand,
 } from "../dispatchers/sync-dispatcher";
@@ -20,8 +29,8 @@ import {
 } from "@/features/platform/reducer";
 import type {
   CanvasCommand,
-  PartialCanvasEnvelope,
 } from "@/shared/types/canvas-tools";
+import type { PartialUnifiedEnvelope } from "@/shared/types/unified-tools";
 import type {
   HistoryEntry,
   ImageLayer,
@@ -47,6 +56,11 @@ export interface UseCanvasOrchestratorParams {
   readonly activeStyleId: string;
   /** 当 LLM 命令包含 platform.* 时, 上层用这个 dispatch 应用 */
   readonly platformDispatch: (action: PlatformAction) => void;
+  /** drawio dispatch context — 当 LLM 命令包含 drawio.* 时调用 */
+  readonly diagramDispatch?: {
+    readonly chartXML: string;
+    readonly loadDiagram: (xml: string) => string | null;
+  };
 }
 
 export interface UseCanvasOrchestratorResult extends CanvasOrchestratorState {
@@ -88,6 +102,8 @@ export function useCanvasOrchestrator(
   activeStyleIdRef.current = params.activeStyleId;
   const platformDispatchRef = useRef(params.platformDispatch);
   platformDispatchRef.current = params.platformDispatch;
+  const diagramDispatchRef = useRef(params.diagramDispatch);
+  diagramDispatchRef.current = params.diagramDispatch;
 
   /**
    * 更新最新 turn (immutable patch)。
@@ -188,11 +204,40 @@ export function useCanvasOrchestrator(
    * 异步命令会立即 fetch, 不等结果 (jobId 通过 SSE 反向通知)。
    */
   const applyCommand = useCallback(
-    async (command: CanvasCommand): Promise<void> => {
+    async (command: CanvasCommand | DrawioCommand): Promise<void> => {
       const summary = buildActionSummary(
         command.tool,
         command as unknown as Record<string, unknown>,
       );
+
+      // drawio.* → 走 diagram dispatcher
+      if (isDrawioTool(command.tool)) {
+        const dispatch = diagramDispatchRef.current;
+        if (!dispatch) {
+          console.warn("[orchestrator] drawio command but no diagramDispatch:", command.tool);
+          return;
+        }
+        const drawioCmd = command as DrawioCommand;
+        switch (drawioCmd.tool) {
+          case "drawio.display_diagram":
+            applyDisplayDiagram(drawioCmd, dispatch);
+            break;
+          case "drawio.edit_diagram":
+            applyEditDiagram(drawioCmd, dispatch);
+            break;
+          case "drawio.append_diagram":
+            applyAppendDiagram(drawioCmd, dispatch);
+            break;
+          case "drawio.get_shape_library":
+            // 服务端 tool execute 已直接返回内容给 LLM, 客户端无操作
+            break;
+        }
+        patchCurrentTurn((t) => ({
+          ...t,
+          actions: [...t.actions, { tool: command.tool, summary, status: "done" }],
+        }));
+        return;
+      }
 
       // platform.* → 走 reducer
       if (isPlatformTool(command.tool)) {
@@ -237,7 +282,7 @@ export function useCanvasOrchestrator(
 
       // 异步命令 (生图 / 编辑)
       if (isAsyncCanvasTool(command.tool)) {
-        const result = dispatchAsyncCommand(command, layersRef.current);
+        const result = dispatchAsyncCommand(command as CanvasCommand, layersRef.current);
         if (result.placeholderLayer) {
           setLayers(result.nextLayers);
           // 异步: action 进 running, 关联 layerId, 等 SSE 改成 done/failed
@@ -301,7 +346,7 @@ export function useCanvasOrchestrator(
 
       // 同步命令 (布局 / 删除)
       const result = dispatchSyncCommand(
-        command,
+        command as CanvasCommand,
         layersRef.current,
         activeStyleIdRef.current,
       );
@@ -370,9 +415,9 @@ export function useCanvasOrchestrator(
           if (done) break;
           accumulated += decoder.decode(value, { stream: true });
 
-          let partial: PartialCanvasEnvelope | null = null;
+          let partial: PartialUnifiedEnvelope | null = null;
           try {
-            partial = parse(accumulated, Allow.ALL) as PartialCanvasEnvelope;
+            partial = parse(accumulated, Allow.ALL) as PartialUnifiedEnvelope;
           } catch {
             continue;
           }
@@ -388,7 +433,7 @@ export function useCanvasOrchestrator(
             appliedCommandIdsRef.current.add(fingerprint);
             // 进入 executing 状态
             patchCurrentTurn((t) => ({ ...t, status: "executing" }));
-            await applyCommand(cmd as CanvasCommand);
+            await applyCommand(cmd as CanvasCommand | DrawioCommand);
           }
 
           if (partial.narration) {
