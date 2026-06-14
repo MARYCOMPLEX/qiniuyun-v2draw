@@ -101,6 +101,10 @@ const reducePanel = (
 };
 
 export function platformReducer(state: PlatformState, action: PlatformAction): PlatformState {
+  // 防御: action 可能为 undefined (开发期某些异常调用)
+  if (!action || typeof action !== "object" || !("type" in action)) {
+    return state;
+  }
   switch (action.type) {
     case "platform/set_theme":
       if (state.activeStyleId === action.themeId) return state;
