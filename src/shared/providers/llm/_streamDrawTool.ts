@@ -3,10 +3,21 @@ import { streamText } from "ai";
 import { getAIModel } from "./ai-providers";
 import { unifiedEnvelopeSchema } from "@/shared/types/unified-tools";
 
+export interface ConversationMessage {
+  readonly role: "user" | "assistant";
+  readonly content: string;
+}
+
 export interface StreamDrawRequest {
   systemPrompt: string;
   userUtterance: string;
   canvasState?: string;
+  /**
+   * 最近 N 轮历史 (user + assistant narration), 不含本轮 utterance。
+   * 用于 LLM 理解 "切到那个风格""把刚才那个删了" 等指代。
+   * 留空则退化为单轮调用。
+   */
+  history?: ReadonlyArray<ConversationMessage>;
   temperature?: number;
   maxTokens?: number;
 }
@@ -26,10 +37,18 @@ export function streamDrawToolAsTextStream(request: StreamDrawRequest): Response
     systemContent += `\n\n---\n## Current Canvas State (AUTHORITATIVE)\n\`\`\`json\n${request.canvasState}\n\`\`\`\n`;
   }
 
+  const hasHistory = request.history && request.history.length > 0;
+  const messages = hasHistory
+    ? [
+        ...request.history!.map((m) => ({ role: m.role, content: m.content })),
+        { role: "user" as const, content: request.userUtterance },
+      ]
+    : undefined;
+
   const result = streamText({
     model,
     system: systemContent,
-    prompt: request.userUtterance,
+    ...(messages ? { messages } : { prompt: request.userUtterance }),
     temperature: request.temperature ?? 0,
     ...(request.maxTokens && { maxOutputTokens: request.maxTokens }),
     tools: {
