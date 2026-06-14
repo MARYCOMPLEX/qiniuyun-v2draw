@@ -334,7 +334,7 @@ export function useCanvasOrchestrator(
               },
             });
           }
-          if (result.fetchPayload) {
+          if (result.fetchPayload && result.fetchPayload.prompt?.trim()) {
             void fetch("/api/canvas/generate", {
               method: "POST",
               headers: { "Content-Type": "application/json" },

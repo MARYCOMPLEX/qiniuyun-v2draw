@@ -106,6 +106,12 @@ const STYLE_INDEX = new Map<StyleId, MarketStyle>(MARKET_STYLES.map((s) => [s.id
 
 export const DEFAULT_STYLE_ID: StyleId = MARKET_STYLES[0]!.id;
 
+/** 合法 StyleId 集合 — 用于 LLM 输出校验 */
+export const VALID_STYLE_IDS: ReadonlyArray<StyleId> = MARKET_STYLES.map((s) => s.id);
+
+export const isValidStyleId = (id: unknown): id is StyleId =>
+  typeof id === "string" && (VALID_STYLE_IDS as readonly string[]).includes(id);
+
 export const getStyleById = (id: StyleId): MarketStyle => {
   const found = STYLE_INDEX.get(id);
   if (!found) {

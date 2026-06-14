@@ -1,4 +1,5 @@
 import type { PlatformState, Viewport } from "@/shared/types/layer";
+import { isValidStyleId } from "@/shared/constants/marketStyles";
 import { PLATFORM_TOOL } from "@/shared/types/tools";
 import type {
   ClosePanelCommand,
@@ -107,6 +108,11 @@ export function platformReducer(state: PlatformState, action: PlatformAction): P
   }
   switch (action.type) {
     case "platform/set_theme":
+      // 防御 LLM 输出非法 themeId (例: "cyberpunk" / "vangogh" 等不带前缀的)
+      if (!isValidStyleId(action.themeId)) {
+        console.warn("[platformReducer] invalid themeId, ignoring:", action.themeId);
+        return state;
+      }
       if (state.activeStyleId === action.themeId) return state;
       return { ...state, activeStyleId: action.themeId };
 
