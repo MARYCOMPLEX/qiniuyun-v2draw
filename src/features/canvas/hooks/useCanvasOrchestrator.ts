@@ -531,6 +531,16 @@ function isCommandComplete(cmd: { tool?: string; [k: string]: unknown }): boolea
   if (!cmd.tool) return false;
   if (cmd.tool === CANVAS_TOOL.CLEAR_CANVAS) return true;
   if (typeof cmd.tool !== "string") return false;
+  // drawio.* 字段独立校验, 优先级最高
+  if (cmd.tool === "drawio.display_diagram" || cmd.tool === "drawio.append_diagram") {
+    return typeof cmd.xml === "string" && cmd.xml.length > 0;
+  }
+  if (cmd.tool === "drawio.edit_diagram") {
+    return Array.isArray(cmd.operations) && cmd.operations.length > 0;
+  }
+  if (cmd.tool === "drawio.get_shape_library") {
+    return typeof cmd.library === "string";
+  }
   // 大部分命令都有 prompt 或 targetLayerId
   if ("prompt" in cmd) return typeof cmd.prompt === "string" && cmd.prompt.length > 0;
   if ("targetLayerId" in cmd) return typeof cmd.targetLayerId === "string";
