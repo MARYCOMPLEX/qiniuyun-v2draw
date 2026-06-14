@@ -9,6 +9,12 @@ import {
 import { dispatchAsyncCommand } from "../dispatchers/async-dispatcher";
 import { useJobStream, type JobDoneEvent, type JobFailedEvent } from "./useJobStream";
 import {
+  allocateTurnId,
+  buildActionSummary,
+  type AgentAction,
+  type ConversationTurn,
+} from "../types/conversation";
+import {
   platformCommandToAction,
   type PlatformAction,
 } from "@/features/platform/reducer";
@@ -31,6 +37,7 @@ import {
 export interface CanvasOrchestratorState {
   readonly layers: LayerMap;
   readonly history: ReadonlyArray<HistoryEntry>;
+  readonly turns: ReadonlyArray<ConversationTurn>;
   readonly streaming: boolean;
   readonly latestNarration: string | null;
   readonly error: string | null;
@@ -68,6 +75,7 @@ export function useCanvasOrchestrator(
 ): UseCanvasOrchestratorResult {
   const [layers, setLayers] = useState<LayerMap>(new Map());
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [turns, setTurns] = useState<ConversationTurn[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [latestNarration, setLatestNarration] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +88,51 @@ export function useCanvasOrchestrator(
   activeStyleIdRef.current = params.activeStyleId;
   const platformDispatchRef = useRef(params.platformDispatch);
   platformDispatchRef.current = params.platformDispatch;
+
+  /**
+   * 更新最新 turn (immutable patch)。
+   * 用 ref 闭包保证 SSE 异步回调能拿到最新状态。
+   */
+  const turnsRef = useRef(turns);
+  turnsRef.current = turns;
+  const currentTurnIdRef = useRef<string | null>(null);
+
+  const patchCurrentTurn = useCallback(
+    (patch: (turn: ConversationTurn) => ConversationTurn): void => {
+      setTurns((prev) => {
+        const id = currentTurnIdRef.current;
+        if (!id) return prev;
+        return prev.map((t) => (t.id === id ? patch(t) : t));
+      });
+    },
+    [],
+  );
+
+  /** 按 layerId 找到对应的 action 并更新状态 + 检查 turn 是否全部完成 */
+  const patchActionByLayerId = useCallback(
+    (layerId: string, status: AgentAction["status"], errorMsg?: string): void => {
+      setTurns((prev) =>
+        prev.map((t) => {
+          const hadMatch = t.actions.some((a) => a.layerId === layerId);
+          if (!hadMatch) return t;
+          const nextActions = t.actions.map((a) =>
+            a.layerId === layerId ? { ...a, status, error: errorMsg } : a,
+          );
+          // 如果该 turn 还在 executing 且无 running, 落定终态
+          let nextStatus = t.status;
+          if (t.status === "executing") {
+            const stillRunning = nextActions.some((a) => a.status === "running");
+            if (!stillRunning) {
+              const hasFailed = nextActions.some((a) => a.status === "failed");
+              nextStatus = hasFailed ? "failed" : "done";
+            }
+          }
+          return { ...t, actions: nextActions, status: nextStatus };
+        }),
+      );
+    },
+    [],
+  );
   const abortRef = useRef<AbortController | null>(null);
   const appliedCommandIdsRef = useRef<Set<string>>(new Set());
 
@@ -110,6 +163,7 @@ export function useCanvasOrchestrator(
         });
         return next;
       });
+      patchActionByLayerId(event.layerId, "done");
     },
     onFailed: (event: JobFailedEvent) => {
       setLayers((prev) => {
@@ -125,6 +179,7 @@ export function useCanvasOrchestrator(
         });
         return next;
       });
+      patchActionByLayerId(event.layerId, "failed", event.error);
     },
   });
 
@@ -134,10 +189,20 @@ export function useCanvasOrchestrator(
    */
   const applyCommand = useCallback(
     async (command: CanvasCommand): Promise<void> => {
+      const summary = buildActionSummary(
+        command.tool,
+        command as unknown as Record<string, unknown>,
+      );
+
       // platform.* → 走 reducer
       if (isPlatformTool(command.tool)) {
         const action = platformCommandToAction(command as Parameters<typeof platformCommandToAction>[0]);
         platformDispatchRef.current(action);
+        // 平台工具同步, action 立即 done
+        patchCurrentTurn((t) => ({
+          ...t,
+          actions: [...t.actions, { tool: command.tool, summary, status: "done" }],
+        }));
         if (isHistoryTracked(command.tool)) {
           pushHistory({
             id: `h-${Date.now().toString(36)}`,
@@ -163,6 +228,10 @@ export function useCanvasOrchestrator(
         );
         setLayers(nextLayers);
         setHistory(remainingHistory);
+        patchCurrentTurn((t) => ({
+          ...t,
+          actions: [...t.actions, { tool: command.tool, summary, status: "done" }],
+        }));
         return;
       }
 
@@ -171,6 +240,12 @@ export function useCanvasOrchestrator(
         const result = dispatchAsyncCommand(command, layersRef.current);
         if (result.placeholderLayer) {
           setLayers(result.nextLayers);
+          // 异步: action 进 running, 关联 layerId, 等 SSE 改成 done/failed
+          const layerId = result.placeholderLayer.id;
+          patchCurrentTurn((t) => ({
+            ...t,
+            actions: [...t.actions, { tool: command.tool, summary, status: "running", layerId }],
+          }));
           if (isHistoryTracked(command.tool)) {
             pushHistory({
               id: `h-${Date.now().toString(36)}`,
@@ -232,8 +307,13 @@ export function useCanvasOrchestrator(
       );
       setLayers(result.nextLayers);
       if (result.historyEntry) pushHistory(result.historyEntry);
+      // 同步命令立即 done
+      patchCurrentTurn((t) => ({
+        ...t,
+        actions: [...t.actions, { tool: command.tool, summary, status: "done" }],
+      }));
     },
-    [pushHistory],
+    [pushHistory, patchCurrentTurn],
   );
 
   const run = useCallback(
@@ -244,6 +324,20 @@ export function useCanvasOrchestrator(
       setStreaming(true);
       setError(null);
       appliedCommandIdsRef.current.clear();
+
+      // 创建一个新 turn — 状态 streaming, 无 narration / 无 actions
+      const turnId = allocateTurnId();
+      currentTurnIdRef.current = turnId;
+      const newTurn: ConversationTurn = {
+        id: turnId,
+        timestamp: Date.now(),
+        userUtterance: utterance,
+        narration: null,
+        actions: [],
+        status: "streaming",
+        turnIndex: 1,
+      };
+      setTurns((prev) => [...prev, newTurn]);
 
       try {
         const response = await fetch("/api/generate-draw", {
@@ -292,22 +386,36 @@ export function useCanvasOrchestrator(
             // 只应用看起来"完整"的命令 — 字段够齐全
             if (!isCommandComplete(cmd)) continue;
             appliedCommandIdsRef.current.add(fingerprint);
+            // 进入 executing 状态
+            patchCurrentTurn((t) => ({ ...t, status: "executing" }));
             await applyCommand(cmd as CanvasCommand);
           }
 
-          if (partial.narration) setLatestNarration(partial.narration);
+          if (partial.narration) {
+            setLatestNarration(partial.narration);
+            patchCurrentTurn((t) => ({ ...t, narration: partial!.narration ?? null }));
+          }
         }
+        // LLM 流结束 — turn 状态根据 actions 判断
+        patchCurrentTurn((t) => {
+          const hasFailed = t.actions.some((a) => a.status === "failed");
+          const stillRunning = t.actions.some((a) => a.status === "running");
+          // 如果有 running 的异步任务, 保持 executing 让 SSE 完成
+          if (stillRunning) return { ...t, status: "executing" };
+          return { ...t, status: hasFailed ? "failed" : "done" };
+        });
       } catch (err) {
         if (controller.signal.aborted) return;
         const msg = err instanceof Error ? err.message : "stream 失败";
         console.warn("[orchestrator] run error:", msg);
         setError(msg);
+        patchCurrentTurn((t) => ({ ...t, status: "failed" }));
       } finally {
         if (abortRef.current === controller) abortRef.current = null;
         setStreaming(false);
       }
     },
-    [applyCommand],
+    [applyCommand, patchCurrentTurn],
   );
 
   const reset = useCallback((): void => {
@@ -315,12 +423,14 @@ export function useCanvasOrchestrator(
     abortRef.current = null;
     setLayers(new Map());
     setHistory([]);
+    setTurns([]);
     setStreaming(false);
     setLatestNarration(null);
     setError(null);
+    currentTurnIdRef.current = null;
   }, []);
 
-  return { layers, history, streaming, latestNarration, error, run, reset };
+  return { layers, history, turns, streaming, latestNarration, error, run, reset };
 }
 
 // 工具: 判断 canvas tool 是否异步

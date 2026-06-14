@@ -2,13 +2,13 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 
+import { AgentConversationPanel } from "@/features/canvas/components/AgentConversationPanel";
 import { InfiniteStage } from "@/features/canvas/components/InfiniteStage";
 import { useCanvasOrchestrator } from "@/features/canvas/hooks/useCanvasOrchestrator";
 import { usePlatformState } from "@/features/platform/usePlatformState";
 import { CapabilitiesPanel } from "@/features/voice-control/components/CapabilitiesPanel";
 import { ShaderOrb } from "@/features/voice-control/components/ShaderOrb";
 import { StyleMarketPanel } from "@/features/voice-control/components/StyleMarketPanel";
-import { TelemetryHUD, type TelemetryLogEntry } from "@/features/voice-control/components/TelemetryHUD";
 import { useCapabilities } from "@/features/voice-control/hooks/useCapabilities";
 import { useCapabilityToggles } from "@/features/voice-control/hooks/useCapabilityToggles";
 import { useRealtimeAsr } from "@/features/voice-control/hooks/useRealtimeAsr";
@@ -141,12 +141,7 @@ export default function HomePage() {
     setSelectedLayerIds(new Set());
   }, []);
 
-  // 把 history 适配成 HUD 期望的 logs 格式
-  const hudLogs: readonly TelemetryLogEntry[] = canvas.history.slice(-12).map((h) => ({
-    id: h.id,
-    timestamp: h.timestamp,
-    fragment: `[${h.tool.replace("canvas.", "").replace("platform.", "")}]`,
-  }));
+  // (移除旧 hudLogs — 改用 canvas.turns 直接喂给 AgentConversationPanel)
 
   const transcriptToShow = livePartial || finalUtterance;
 
@@ -258,16 +253,11 @@ export default function HomePage() {
 
       <section className="flex h-full flex-col gap-5 overflow-hidden">
         <div className="min-h-0 flex-1 overflow-hidden">
-          <TelemetryHUD
+          <AgentConversationPanel
             style={activeStyle}
-            listening={vad.listening || asr.recognizing || canvas.streaming}
-            volume={vad.volume}
-            logs={hudLogs}
-            latestPartialJson={
-              livePartial
-                ? `RECOGNIZING: ${livePartial}`
-                : canvas.latestNarration ?? ""
-            }
+            turns={canvas.turns}
+            livePartial={livePartial}
+            streaming={canvas.streaming}
           />
         </div>
         <div
