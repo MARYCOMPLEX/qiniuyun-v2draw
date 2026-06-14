@@ -43,5 +43,9 @@
   },
   "engines": {
     "node": ">=18.18.0"
+  },
+  "optionalDependencies": {
+    "bufferutil": "^4.1.0",
+    "utf-8-validate": "^6.0.6"
   }
 }
