@@ -91,6 +91,7 @@ export function useRealtimeAsr(events: RealtimeAsrEvents = {}): RealtimeAsrAPI {
   const startInflightRef = useRef<Promise<void> | null>(null);
   const eventsRef = useRef(events);
   const recognizingRef = useRef<boolean>(false);
+  const stoppingRef = useRef<boolean>(false);
   const pendingAudioRef = useRef<Uint8Array[]>([]);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startedResolverRef = useRef<{
@@ -141,6 +142,7 @@ export function useRealtimeAsr(events: RealtimeAsrEvents = {}): RealtimeAsrAPI {
     wsRef.current = null;
     taskIdRef.current = null;
     recognizingRef.current = false;
+    stoppingRef.current = false;
     pendingAudioRef.current = [];
     if (startedResolverRef.current) {
       startedResolverRef.current.reject(new Error("ws 已关闭"));
@@ -301,6 +303,9 @@ export function useRealtimeAsr(events: RealtimeAsrEvents = {}): RealtimeAsrAPI {
   const sendAudio = useCallback((pcm: Uint8Array): void => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    // stop() 已发起，音频帧静默丢弃，防止 StopRecognition 之后
+    // 仍有残留 PCM 帧到达网关 → TASK_STATE_ERROR
+    if (stoppingRef.current) return;
     if (recognizingRef.current) {
       ws.send(pcm);
     } else {
@@ -319,6 +324,11 @@ export function useRealtimeAsr(events: RealtimeAsrEvents = {}): RealtimeAsrAPI {
     const info = tokenRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !taskId || !info) return;
 
+    // 先置 stopping 标志，再发 StopRecognition，消除竞态：
+    // sendAudio 在 stopping=true 后静默丢弃，防止 PCM 帧在 StopRecognition
+    // 之后到达网关 → TASK_STATE_ERROR
+    stoppingRef.current = true;
+
     const stopReq = {
       header: {
         message_id: uuidHex(),
@@ -329,10 +339,14 @@ export function useRealtimeAsr(events: RealtimeAsrEvents = {}): RealtimeAsrAPI {
       },
     };
 
-    await new Promise<void>((resolve, reject) => {
-      completedResolverRef.current = { resolve, reject };
-      ws.send(JSON.stringify(stopReq));
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        completedResolverRef.current = { resolve, reject };
+        ws.send(JSON.stringify(stopReq));
+      });
+    } finally {
+      stoppingRef.current = false;
+    }
   }, []);
 
   const disconnect = useCallback(teardown, [teardown]);
