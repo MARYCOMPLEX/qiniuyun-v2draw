@@ -72,4 +72,11 @@ pnpm-lock.yaml.bak
 
 # Local task instructions (not for repo)
 instructions.md
+
+# Local SQLite database (sessions / turns)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 docs/
