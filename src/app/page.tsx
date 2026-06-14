@@ -6,6 +6,8 @@ import { AgentConversationPanel } from "@/features/canvas/components/AgentConver
 import { useCanvasOrchestrator } from "@/features/canvas/hooks/useCanvasOrchestrator";
 import { DrawIoStage } from "@/features/diagram/components/DrawIoStage";
 import { DiagramProvider, useDiagram } from "@/features/diagram/contexts/DiagramContext";
+import { CanvasMarquee } from "@/features/diagram/fx/CanvasMarquee";
+import { StreamingOrbFx } from "@/features/diagram/fx/StreamingOrbFx";
 import { usePlatformState } from "@/features/platform/usePlatformState";
 import { CapabilitiesPanel } from "@/features/voice-control/components/CapabilitiesPanel";
 import { ShaderOrb } from "@/features/voice-control/components/ShaderOrb";
@@ -143,6 +145,15 @@ function HomeContent() {
 
   const transcriptToShow = livePartial || finalUtterance;
 
+  /**
+   * 任意 turn 里仍有 running 异步任务 (生图等待 SSE done) — 跑马灯/呼吸特效跟此联动,
+   * streaming 也算 (LLM 还在吐 token 时画布也算 "进行中")。
+   */
+  const hasRunningAction = canvas.turns.some((t) =>
+    t.actions.some((a) => a.status === "running"),
+  );
+  const fxActive = canvas.streaming || hasRunningAction;
+
   return (
     <main
       className="grid h-screen w-screen grid-cols-[360px_1fr_420px] gap-5 p-5 transition-colors"
@@ -188,6 +199,8 @@ function HomeContent() {
         className="relative h-full w-full overflow-hidden rounded-2xl"
       >
         <DrawIoStage darkMode={activeStyle.ui.mode !== "light"} />
+        <CanvasMarquee active={fxActive} />
+        <StreamingOrbFx active={canvas.streaming} />
         <p
           className="pointer-events-none absolute left-5 top-5 flex items-center gap-2 text-xs uppercase tracking-[0.3em]"
           style={{ color: activeStyle.ui.textMuted }}

@@ -1,0 +1,77 @@
+/**
+ * CanvasMarquee 跑马灯 + 呼吸闪烁。
+ *
+ * 跑马灯实现:
+ * - .canvas-marquee__beam 外层 conic-gradient 旋转 4s 一周
+ * - mask 挖出 2px 边框 (linear-gradient white 双层做减法), 跑光只显示在边缘
+ * - mix-blend-mode: screen 让流光跟暗色画布有正确叠加
+ *
+ * 呼吸闪烁实现:
+ * - .canvas-marquee__pulse 边框 box-shadow 1.6s 强弱交替
+ * - 跟 streaming-orb-fx__hint 同周期, 视觉同步
+ *
+ * 关键约束:
+ * - inset: -2px 让流光"长在画布外缘", 不占画布内空间
+ * - pointer-events: none 不挡画布交互
+ */
+
+.canvas-marquee {
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* 跑马灯 — conic-gradient 旋转 + mask 挖中心 */
+.canvas-marquee__beam {
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  background: conic-gradient(
+    from 0deg,
+    rgba(0, 242, 254, 0) 0%,
+    rgba(0, 242, 254, 0.85) 12%,
+    rgba(79, 172, 254, 0.95) 22%,
+    rgba(217, 70, 239, 0.55) 32%,
+    rgba(0, 242, 254, 0) 45%,
+    rgba(0, 242, 254, 0) 100%
+  );
+  animation: canvas-marquee-spin 4s linear infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  mix-blend-mode: screen;
+  opacity: 0.95;
+}
+
+/* 呼吸边框 — box-shadow 内外双层强弱交替 */
+.canvas-marquee__pulse {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(0, 242, 254, 0.35);
+  animation: canvas-marquee-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes canvas-marquee-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes canvas-marquee-pulse {
+  0%, 100% {
+    border-color: rgba(0, 242, 254, 0.25);
+    box-shadow:
+      0 0 12px rgba(0, 242, 254, 0.18),
+      inset 0 0 12px rgba(0, 242, 254, 0.08);
+  }
+  50% {
+    border-color: rgba(79, 172, 254, 0.7);
+    box-shadow:
+      0 0 24px rgba(79, 172, 254, 0.55),
+      inset 0 0 18px rgba(0, 242, 254, 0.25);
+  }
+}
