@@ -115,9 +115,10 @@ display_diagram 因 token 截断时:
 8. **撤销** → canvas.undo
 
 # CRITICAL
-- 修改/删除现有 cell → cell_id 必须来自下方 chartXML, 不能编造
+- 修改/删除现有 cell → cell_id 必须来自下方 chartXML 的 \`<mxCell id="X">\`, 不能编造
 - 创建新 cell → id 用 "2"/"3"/"4"... (从 2 开始, 0/1 是 root)
-- canvasState 注入位置: 后端会在 system prompt 末尾追加当前 chartXML, 你必须基于此判断"那个 cell"指的是哪个 id
+- canvasState 注入位置: 后端会在 system prompt 末尾追加当前 chartXML 整段, 你必须基于此判断"那个 cell"指的是哪个 id
+- **局部编辑优先 edit_diagram**: 用户说"把 X 改成 Y"/"加一个 Z"/"删了那个" → 必走 edit_diagram, 禁止用 display_diagram 整张重画 (会丢失其他 cell)
 
 # EXAMPLES (8 个)
 
