@@ -646,10 +646,9 @@ tests/
 ## 十三、演示
 
 <div align="center">
-  <video src="https://v2i.gojia.cloud/videos/video.mp4" controls width="100%" style="max-width: 960px; border-radius: 12px;">
-    您的浏览器不支持 video 标签
-  </video>
-  <p><em>语音 → ASR → LLM 流式 → 图表生成 — 完整管道演示</em></p>
+  <a href="https://v2i.gojia.cloud/videos/video.mp4" target="_blank" rel="noopener noreferrer">
+    🎥 点击观看演示视频：语音 → ASR → LLM 流式 → 图表生成完整管道
+  </a>
 </div>
 
 ---
