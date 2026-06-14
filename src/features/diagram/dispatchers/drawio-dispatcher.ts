@@ -99,8 +99,14 @@ export function applyAppendDiagram(
 
 /**
  * 应用单条 edit 操作到 XML。
+ *
+ * 防御: cell_id 缺失 / 空字符串时跳过, 避免 escapeRegex(undefined) 炸 runtime。
+ * (isCommandComplete 已经守在外层, 这里是双保险, 防止未来代码路径绕过)
  */
 function applySingleOperation(xml: string, op: DiagramOperation): string {
+  if (!op || typeof op.cell_id !== "string" || op.cell_id.length === 0) {
+    return xml;
+  }
   const idPattern = new RegExp(
     `<mxCell\\s+[^>]*\\bid=["']${escapeRegex(op.cell_id)}["'][^>]*(?:\\/>|><\\/mxCell>|>[\\s\\S]*?<\\/mxCell>)`,
     "g",
