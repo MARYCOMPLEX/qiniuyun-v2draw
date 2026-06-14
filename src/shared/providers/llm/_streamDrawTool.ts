@@ -1,7 +1,7 @@
 import { streamText } from "ai";
 
 import { getAIModel } from "./ai-providers";
-import { drawToolSchema } from "@/shared/types/schema";
+import { canvasEnvelopeSchema } from "@/shared/types/canvas-tools";
 
 export interface StreamDrawRequest {
   systemPrompt: string;
@@ -35,10 +35,10 @@ export function streamDrawToolAsTextStream(request: StreamDrawRequest): Response
     temperature: request.temperature ?? 0,
     ...(request.maxTokens && { maxOutputTokens: request.maxTokens }),
     tools: {
-      emit_draw_commands: {
+      emit_canvas_commands: {
         description:
-          "Emit a structured draw envelope with commands array (CREATE_SHAPES / MODIFY_SHAPE / DELETE_SHAPE / CLEAR_CANVAS / STYLE_TRANSFORM) plus a brief narration.",
-        inputSchema: drawToolSchema,
+          "Emit a structured canvas envelope with one or more commands (canvas.* business tools or platform.* platform tools) plus a brief narration.",
+        inputSchema: canvasEnvelopeSchema,
       },
     },
     onError({ error }) {

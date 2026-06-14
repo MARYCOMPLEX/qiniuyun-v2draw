@@ -1,15 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
-import { VectorStage, type VectorStageHandle } from "@/features/art-canvas/components/VectorStage";
+import { InfiniteStage } from "@/features/canvas/components/InfiniteStage";
+import { useCanvasOrchestrator } from "@/features/canvas/hooks/useCanvasOrchestrator";
+import { usePlatformState } from "@/features/platform/usePlatformState";
 import { CapabilitiesPanel } from "@/features/voice-control/components/CapabilitiesPanel";
 import { ShaderOrb } from "@/features/voice-control/components/ShaderOrb";
 import { StyleMarketPanel } from "@/features/voice-control/components/StyleMarketPanel";
 import { TelemetryHUD, type TelemetryLogEntry } from "@/features/voice-control/components/TelemetryHUD";
 import { useCapabilities } from "@/features/voice-control/hooks/useCapabilities";
 import { useCapabilityToggles } from "@/features/voice-control/hooks/useCapabilityToggles";
-import { useDrawStream } from "@/features/voice-control/hooks/useDrawStream";
 import { useRealtimeAsr } from "@/features/voice-control/hooks/useRealtimeAsr";
 import { useTtsStream } from "@/features/voice-control/hooks/useTtsStream";
 import { useVoiceVAD } from "@/features/voice-control/hooks/useVoiceVAD";
@@ -20,51 +21,54 @@ import {
 } from "@/shared/constants/marketStyles";
 
 /**
- * 主页面 — 实时识别 + 多工具命令版。
- * 数据流: VAD 检测开口 → 浏览器直连阿里云 ws → 边推 PCM 边收 changed 事件 (实时出字)
- *        → VAD 检测结束 → ws 收 final → /api/generate-draw 流式 → shapeMap 增量渲染
+ * 主页面 — 多模态 AI 创作平台版。
+ *
+ * 数据流:
+ *   VAD 检测开口 → 浏览器直连阿里云 ws → 边推 PCM 边收 changed (实时出字)
+ *      → VAD 检测结束 → ws 收 final → useCanvasOrchestrator.run(utterance)
+ *      → /api/generate-draw 流式 LLM commands
+ *      → 三路分发: platform reducer / canvas 同步 / canvas 异步 → fetch /api/canvas/generate
+ *      → SSE 收到 job-done → 替换 layer.imageUrl → 画布渲染
+ *
+ * 双层架构:
+ *   - PlatformState (主题/面板/语音/TTS/网格/视口) 由 platformReducer 唯一处理
+ *   - LayerMap (图像层) 由 useCanvasOrchestrator 维护
  */
 export default function HomePage() {
-  const [activeStyleId, setActiveStyleId] = useState<StyleId>(DEFAULT_STYLE_ID);
+  const platform = usePlatformState(DEFAULT_STYLE_ID);
+  const activeStyleId = platform.state.activeStyleId as StyleId;
   const activeStyle = getStyleById(activeStyleId);
-  const draw = useDrawStream();
+
+  const canvas = useCanvasOrchestrator({
+    activeStyleId,
+    platformDispatch: platform.dispatch,
+  });
   const tts = useTtsStream();
   const { capabilities, isLoading: capabilitiesLoading } = useCapabilities();
   const { toggles, setToggle } = useCapabilityToggles();
-  const stageRef = useRef<VectorStageHandle | null>(null);
-  const activeStyleIdRef = useRef<StyleId>(activeStyleId);
-  activeStyleIdRef.current = activeStyleId;
+  const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(new Set());
 
   const [livePartial, setLivePartial] = useState<string>("");
   const [finalUtterance, setFinalUtterance] = useState<string>("");
-  const [showGrid, setShowGrid] = useState<boolean>(false);
 
-  // 用户从风格卡手动切风格时, 让画布所有图元的 stroke 跟随新风格 palette。
-  // Why: STYLE_TRANSFORM 命令链路不走这条 (那是语音切风格), 但 UI 点击需要等价行为。
-  const drawRef = useRef(draw);
-  drawRef.current = draw;
-  useEffect(() => {
-    drawRef.current.restyle(activeStyleId);
-  }, [activeStyleId]);
-
-  // narration 落定后给智能体配音 — 仅当 TTS 开关开启且能力就绪。
-  // Why: 用 useEffect 监听 turns 状态机 done 跃迁, 避免在流式期间反复触发;
-  // ref 解耦让 capabilities/toggles 变化不打断当前播放。
+  // narration 播报 (TTS 在 toggles.tts && capabilities.tts.ready 时启用)
   const ttsActiveRef = useRef<boolean>(false);
   ttsActiveRef.current = toggles.tts && capabilities.tts.ready;
   const ttsSpeakRef = useRef(tts.speak);
   ttsSpeakRef.current = tts.speak;
-  const lastSpokenTurnRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!ttsActiveRef.current) return;
-    const lastDone = [...draw.turns].reverse().find((t) => t.status === "done");
-    if (!lastDone) return;
-    if (lastSpokenTurnRef.current === lastDone.id) return;
-    const narration = lastDone.narration.trim();
-    if (!narration) return;
-    lastSpokenTurnRef.current = lastDone.id;
-    void ttsSpeakRef.current(narration);
-  }, [draw.turns]);
+  const lastSpokenRef = useRef<string | null>(null);
+  // 当 narration 变化且 TTS 启用, 朗读
+  if (
+    canvas.latestNarration &&
+    canvas.latestNarration !== lastSpokenRef.current &&
+    ttsActiveRef.current
+  ) {
+    lastSpokenRef.current = canvas.latestNarration;
+    void ttsSpeakRef.current(canvas.latestNarration);
+  }
+
+  const canvasRef = useRef(canvas);
+  canvasRef.current = canvas;
 
   const asrEvents = useMemo(
     () => ({
@@ -74,14 +78,12 @@ export default function HomePage() {
         setFinalUtterance(text);
         const trimmed = text.trim();
         if (trimmed) {
-          void draw.run(trimmed, activeStyleIdRef.current, {
-            onStyleSwitch: (next) => setActiveStyleId(next),
-          });
+          void canvasRef.current.run(trimmed);
         }
       },
       onError: (err: string) => console.warn("[asr] error:", err),
     }),
-    [draw],
+    [],
   );
 
   const asr = useRealtimeAsr(asrEvents);
@@ -120,10 +122,30 @@ export default function HomePage() {
     void vad.start();
   }, [vad, asr]);
 
-  const hudLogs: readonly TelemetryLogEntry[] = draw.turns.slice(-12).map((turn) => ({
-    id: turn.id,
-    timestamp: turn.timestamp,
-    fragment: `[${turn.status}] ${turn.utterance}${turn.narration ? ` → ${turn.narration}` : ""}`,
+  // Layer 选择
+  const onSelect = useCallback((id: string, additive: boolean) => {
+    setSelectedLayerIds((prev) => {
+      const next = new Set(prev);
+      if (additive) {
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+      } else {
+        next.clear();
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const onDeselectAll = useCallback(() => {
+    setSelectedLayerIds(new Set());
+  }, []);
+
+  // 把 history 适配成 HUD 期望的 logs 格式
+  const hudLogs: readonly TelemetryLogEntry[] = canvas.history.slice(-12).map((h) => ({
+    id: h.id,
+    timestamp: h.timestamp,
+    fragment: `[${h.tool.replace("canvas.", "").replace("platform.", "")}]`,
   }));
 
   const transcriptToShow = livePartial || finalUtterance;
@@ -136,7 +158,7 @@ export default function HomePage() {
       <section className="flex flex-col gap-5">
         <StyleMarketPanel
           activeStyleId={activeStyleId}
-          onActivate={setActiveStyleId}
+          onActivate={platform.setTheme}
           activeStyle={activeStyle}
         />
         <CapabilitiesPanel
@@ -156,9 +178,9 @@ export default function HomePage() {
             ASR: {asr.error}
           </p>
         ) : null}
-        {draw.error ? (
+        {canvas.error ? (
           <p className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
-            画图: {draw.error}
+            画布: {canvas.error}
           </p>
         ) : null}
         {tts.error ? (
@@ -172,11 +194,14 @@ export default function HomePage() {
         aria-label="canvas-stage"
         className="relative h-full w-full overflow-hidden rounded-2xl"
       >
-        <VectorStage
-          ref={stageRef}
-          shapes={draw.shapes}
+        <InfiniteStage
+          layers={canvas.layers}
+          selectedLayerIds={selectedLayerIds}
+          onSelect={onSelect}
+          onDeselectAll={onDeselectAll}
           background={activeStyle.background}
-          showGrid={showGrid}
+          accentColor={activeStyle.accent}
+          showGrid={platform.state.showGrid}
         />
         <p
           className="pointer-events-none absolute left-5 top-5 flex items-center gap-2 text-xs uppercase tracking-[0.3em]"
@@ -195,24 +220,24 @@ export default function HomePage() {
           <span>ACTIVE STYLE · {activeStyle.id}</span>
         </p>
         <button
-          onClick={() => setShowGrid((v) => !v)}
+          onClick={() => platform.toggleGrid()}
           className="absolute right-5 top-5 rounded-md border px-2 py-1 text-[10px] uppercase tracking-[0.2em] transition-colors"
           style={{
             borderColor: activeStyle.ui.panelBorder,
-            color: showGrid ? activeStyle.accent : activeStyle.ui.textMuted,
-            backgroundColor: showGrid
+            color: platform.state.showGrid ? activeStyle.accent : activeStyle.ui.textMuted,
+            backgroundColor: platform.state.showGrid
               ? `${activeStyle.accent}10`
               : "transparent",
           }}
           title="切换坐标网格 (50px)"
         >
-          {showGrid ? "GRID ON" : "GRID OFF"}
+          {platform.state.showGrid ? "GRID ON" : "GRID OFF"}
         </button>
         <p
-          className="pointer-events-none absolute bottom-5 right-5 text-xs"
+          className="pointer-events-none absolute bottom-5 left-5 text-xs"
           style={{ color: activeStyle.ui.textMuted }}
         >
-          {draw.streaming ? "STREAMING…" : `SHAPES · ${draw.shapes.size}`}
+          {canvas.streaming ? "STREAMING…" : `LAYERS · ${canvas.layers.size}`}
         </p>
         {transcriptToShow ? (
           <div
@@ -235,13 +260,13 @@ export default function HomePage() {
         <div className="min-h-0 flex-1 overflow-hidden">
           <TelemetryHUD
             style={activeStyle}
-            listening={vad.listening || asr.recognizing || draw.streaming}
+            listening={vad.listening || asr.recognizing || canvas.streaming}
             volume={vad.volume}
             logs={hudLogs}
             latestPartialJson={
               livePartial
                 ? `RECOGNIZING: ${livePartial}`
-                : draw.latestPartialJson
+                : canvas.latestNarration ?? ""
             }
           />
         </div>
