@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import type { MarketStyle } from "@/shared/constants/marketStyles";
 
@@ -16,6 +16,10 @@ interface AgentConversationPanelProps {
   readonly livePartial?: string;
   /** 当前是否在 streaming (LLM 正在吐 commands) */
   readonly streaming: boolean;
+  /** 麦克风音量 (0-1) — 用于顶部音量条柱 */
+  readonly volume?: number;
+  /** VAD 是否在监听 — 控制音量条活跃度 */
+  readonly listening?: boolean;
 }
 
 const formatClock = (ts: number): string => {
@@ -31,6 +35,8 @@ const STATUS_LABEL: Record<AgentAction["status"], string> = {
   done: "完成",
   failed: "失败",
 };
+
+const BAR_COUNT = 24;
 
 const STATUS_COLOR: Record<AgentAction["status"], string> = {
   pending: "rgba(148, 163, 184, 0.6)",
@@ -53,9 +59,24 @@ export function AgentConversationPanel({
   turns,
   livePartial,
   streaming,
+  volume = 0,
+  listening = false,
 }: AgentConversationPanelProps) {
   const ui = style.ui;
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+
+  // 24 格音量条 — 监听时按 RMS + 正弦相位生成动效, 静默时矮稳
+  const bars = useMemo(
+    () =>
+      Array.from({ length: BAR_COUNT }, (_, idx) => {
+        const phase = (idx / BAR_COUNT) * Math.PI * 2;
+        const energy = listening
+          ? Math.min(1, volume * 6 + Math.abs(Math.sin(phase)) * 0.18)
+          : 0.06;
+        return Math.round(energy * 100);
+      }),
+    [volume, listening],
+  );
 
   // 自动滚动到底部
   useEffect(() => {
@@ -82,6 +103,24 @@ export function AgentConversationPanel({
           {streaming ? "思考中..." : `${turns.length} 轮`}
         </span>
       </header>
+
+      <section
+        aria-label="audio-energy"
+        className="grid h-12 grid-cols-24 items-end gap-[2px] border-b px-5 py-2"
+        style={{ borderColor: ui.panelBorder }}
+      >
+        {bars.map((b, idx) => (
+          <span
+            key={idx}
+            className="block w-full rounded-sm transition-[height] duration-75"
+            style={{
+              height: `${b}%`,
+              background: `linear-gradient(180deg, ${style.palette[0]} 0%, ${style.palette[1]} 100%)`,
+              opacity: listening ? 0.95 : 0.25,
+            }}
+          />
+        ))}
+      </section>
 
       <div ref={scrollerRef} className="flex-1 overflow-y-auto px-4 py-3">
         {turns.length === 0 && !livePartial ? (

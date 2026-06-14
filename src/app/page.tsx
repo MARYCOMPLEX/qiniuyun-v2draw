@@ -258,6 +258,8 @@ export default function HomePage() {
             turns={canvas.turns}
             livePartial={livePartial}
             streaming={canvas.streaming}
+            volume={vad.volume}
+            listening={vad.listening || asr.recognizing || canvas.streaming}
           />
         </div>
         <div
