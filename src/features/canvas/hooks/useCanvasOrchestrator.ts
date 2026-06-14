@@ -544,7 +544,26 @@ function isCommandComplete(cmd: { tool?: string; [k: string]: unknown }): boolea
     return isMxCellXmlComplete(cmd.xml);
   }
   if (cmd.tool === "drawio.edit_diagram") {
-    return Array.isArray(cmd.operations) && cmd.operations.length > 0;
+    if (!Array.isArray(cmd.operations) || cmd.operations.length === 0) return false;
+    // 每条 operation 必须 字段齐全 才算完整 — 流式中间帧字段渐进, cell_id 没补出来时
+    // dispatcher 会拿 undefined 进 escapeRegex 炸出 'Cannot read properties of undefined (reading replace)'。
+    for (const op of cmd.operations) {
+      if (!op || typeof op !== "object") return false;
+      const operation = (op as { operation?: unknown }).operation;
+      const cellId = (op as { cell_id?: unknown }).cell_id;
+      const newXml = (op as { new_xml?: unknown }).new_xml;
+      if (operation !== "update" && operation !== "add" && operation !== "delete") {
+        return false;
+      }
+      if (typeof cellId !== "string" || cellId.length === 0) return false;
+      // update / add 必须带 new_xml; delete 可省
+      if (operation !== "delete") {
+        if (typeof newXml !== "string" || newXml.length === 0) return false;
+        // new_xml 也要等 mxCell 闭合, 防止流式中拿到半截 XML 导致 dispatcher regex 替换异常
+        if (!isMxCellXmlComplete(newXml)) return false;
+      }
+    }
+    return true;
   }
   // 大部分命令都有 prompt 或 targetLayerId
   if ("prompt" in cmd) return typeof cmd.prompt === "string" && cmd.prompt.length > 0;
