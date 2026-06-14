@@ -1,7 +1,7 @@
 import { ASR_PROVIDER_IDS, type AsrProviderId } from "./asr/types";
 import { IMAGE_PROVIDER_IDS, type ImageProviderId } from "./image/types";
 import { SEARCH_PROVIDER_IDS, type SearchProviderId } from "./search/types";
-import { TTS_PROVIDER_IDS, type TtsProviderId } from "./tts/types";
+import { TTS_PROVIDER_IDS } from "./tts/types";
 
 export type CapabilityKind = "llm" | "asr" | "tts" | "image" | "search";
 

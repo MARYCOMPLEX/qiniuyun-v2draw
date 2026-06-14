@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AgentConversationPanel } from "@/features/canvas/components/AgentConversationPanel";
 import { useCanvasOrchestrator } from "@/features/canvas/hooks/useCanvasOrchestrator";
@@ -72,15 +72,17 @@ function HomeContent() {
   const ttsSpeakRef = useRef(tts.speak);
   ttsSpeakRef.current = tts.speak;
   const lastSpokenRef = useRef<string | null>(null);
-  // 当 narration 变化且 TTS 启用, 朗读
-  if (
-    canvas.latestNarration &&
-    canvas.latestNarration !== lastSpokenRef.current &&
-    ttsActiveRef.current
-  ) {
-    lastSpokenRef.current = canvas.latestNarration;
-    void ttsSpeakRef.current(canvas.latestNarration);
-  }
+  // 当 narration 落定 (streaming 结束) 且 TTS 启用, 朗读最终 narration。
+  // Why: 之前在 render 里直接判断会被流式中间帧 N 次触发, 每次 abort 上一次 fetch,
+  // 导致 /api/tts 全是 canceled。改用 useEffect 监听 streaming 跃迁 + 只读最新 narration。
+  useEffect(() => {
+    if (canvas.streaming) return; // 还在流式中, 等落定
+    if (!ttsActiveRef.current) return;
+    const narration = canvas.latestNarration;
+    if (!narration || narration === lastSpokenRef.current) return;
+    lastSpokenRef.current = narration;
+    void ttsSpeakRef.current(narration);
+  }, [canvas.streaming, canvas.latestNarration]);
 
   const canvasRef = useRef(canvas);
   canvasRef.current = canvas;
