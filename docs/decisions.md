@@ -6,6 +6,80 @@
 
 ---
 
+## 2026-06-14 · 33 · edit_diagram 流式中崩溃 — 双层守卫修复 (PR #46 fix/edit-diagram-streaming-guard)
+- **上下文**: PR #45 注入 chartXML 后用户立刻反馈 "画布: Cannot read properties of undefined (reading 'replace')"。bug 一直存在, 只是 LLM 之前看不到 chartXML, 所有编辑都被翻译成 display_diagram 整张重画, 走不到 edit_diagram 路径, 故没显形。
+- **选择**: **两层防御** — orchestrator 流式守卫深校验 + dispatcher 入口防御。
+- **备选**:
+  - A 只改 orchestrator (单层) — 未来代码路径绕过 isCommandComplete 仍会炸
+  - B 只改 dispatcher (单层) — 半成品 op 已经进入分发流, action 状态被错误推进
+  - C 改 zod 强校验 — partial-json 流式中本来就允许字段渐进, 这是设计而非 bug
+- **影响**:
+  - orchestrator.isCommandComplete 深校验每条 operation: operation 三选一 / cell_id 非空 / update+add 必须带 isMxCellXmlComplete 的 new_xml
+  - dispatcher.applySingleOperation 入口防御: cell_id 缺失或空白则 xml 原样回灌
+  - 复用 isMxCellXmlComplete (跟 display_diagram 流式守卫一致) 等 mxCell 闭合再分发
+  - 新增 tests/drawioDispatcher.test.ts 8 cases, 核心回归 "缺 cell_id 的 op 静默跳过, 不抛 replace of undefined"
+  - **教训**: 流式 partial-json 解析不能假设字段齐全, 任何后续操作 (regex / DOM / 网络) 都要做 \`undefined\` 防御; 双层守卫不是过度工程, 是流式系统的标配。
+
+## 2026-06-14 · 32 · 兑现局部编辑 — chartXML 注入 LLM 上下文 (PR #45 feat/pass-chartxml-context)
+- **上下文**: 用户问 "编辑局部不好实现啊, 我的思路是将上一轮输出的 schema 输入给下一轮然后加上提示词这样, 同时保证其他部分不要动"。我读代码发现 directorPrompt CRITICAL 段已写明 "后端会在 prompt 末尾追加当前 chartXML", 但实际 fetch payload **从未送 chartXML**, 只发了 existingShapes (image layer 元数据)。一句空头支票挂了几个月。
+- **选择**: **兑现承诺** — 把 chartXML 加进 fetch payload, 不改前端编辑器 / 不引入 React Flow / 不改 SVG 引擎。最小改动接通已有的 edit_diagram 工具链。
+- **备选**:
+  - A 引入 React Flow 做编辑器 — 大改, 用户原话否定 "我的思路是把 schema 输入下一轮", 不要前端编辑
+  - B 在前端做 mxCell 拖拽 — 自研编辑器, 工程量大
+  - C 仅改 prompt 文案而不传数据 — 已经写了, 没用, 数据没送到
+- **影响**:
+  - canvasState.ts (新): 拼装 chartXML + existingShapes 成 markdown 块, 抽独立模块以避开 Next.js route.ts 命名导出限制 (route 文件只允许 POST/GET/runtime/dynamic)
+  - route.ts requestSchema 加 chartXML 字段 (max 80KB ≈ 1000-1500 个 mxCell)
+  - useCanvasOrchestrator fetch body 加 chartXML, 取自 diagramDispatchRef.current.chartXML
+  - directorPrompt CRITICAL 段强化: "局部编辑优先 edit_diagram, 禁止 display_diagram 整张重画"
+  - LLM 真的开始用 edit_diagram → 立刻触发 PR #46 的流式 bug (条目 33)
+  - **教训**: prompt 里的 "系统会做 X" 必须验证数据真的到位, 文案不是契约。
+
+## 2026-06-14 · 31 · 自研 SVG 引擎替代 react-drawio iframe (PR #44 feat/svg-only-renderer)
+- **上下文**: 用户提供 next-ai-draw-io GitHub 链接说 "我不喜欢 iframe 这种方式, 我可以自己实现一个最小的 drawio 渲染引擎吗"。讨论后用户接受 "只要能显示能渲染、能解析 schema" 的最小方案。
+- **选择**: **自研只读 SVG 引擎**, 6 形状 (rect / rounded-rect / ellipse / rhombus / cylinder / image) + 直线/直角边 + 文字 + 图像 mxCell, regex 解析 mxCell XML 不引入 DOMParser 依赖。
+- **备选**:
+  - A 旁路存在 + 渐进切换 (我最初提议) — 用户拒绝 "不需要那么复杂"
+  - B React Flow + mxCell 双向适配器 — 编辑器, 用户暂不需要
+  - C tldraw — schema 不一致, 转换成本高
+  - D DOMParser 解析 XML — 需切 vitest environment 到 jsdom, 测试基建改动大
+- **影响**:
+  - 4 个新文件 829 行: parseMxStyle.ts (XSS 防御 javascript: image url) / parseMxXml.ts (regex 跟 mxCellUtils 一致) / shapeRenderers.tsx / MxCellSvgRenderer.tsx
+  - DiagramContext 大幅简化: drawioRef / capturePng / exportSvg / latestSvg / isDrawioReady / onDrawioLoad / handleDiagramAutoSave / handleDiagramExport 全删 (grep 验证零消费者), 文件 194 → 65 行
+  - DrawIoStage 47 → 28 行, 卸载 react-drawio 依赖
+  - 27 cases 覆盖 (parseMxStyle 17 + parseMxXml 10), 测试在 node env 跑无需 DOM
+  - 节点中心连线代替精确锚点路由 (mxgraph exitX/exitY 复杂度高, 视觉效果对流程图够用)
+  - 新引擎首次落地, 用 AGENTS.md 5.1 "首次脚手架" 豁免 800 行硬上限 (实际净增 666)
+
+## 2026-06-14 · 30 · 砍 drawio.get_shape_library 工具 — "少即是多" (PR #42 refactor/drop-shape-library)
+- **上下文**: 用户决定 "可以砍掉 AWS/K8s/Azure 形状库"。该工具是从 next-ai-draw-io 抄来的, 本意让 LLM 画云架构图前先查 stencil 库。voice-canvas 路线只做基础流程图/架构图, **该工具自上线起无人调用**, 还给 LLM 决策树多一个分支干扰判断。
+- **选择**: **整段删除** prompt + 工具 schema + dispatcher + 实现 + 9 个 stencil 文档 (~1500 行 markdown)。
+- **备选**:
+  - A 保留 prompt 提示但禁用工具 — LLM 看到工具调用被静默忽略会困惑, 不规范
+  - B 留着以后可能用 — 违反 AGENTS.md 0.5 "少即是多, 能删除不保留"
+- **影响**:
+  - 类型层删 GET_SHAPE_LIBRARY / SHAPE_LIBRARIES / getShapeLibraryCmd / GetShapeLibraryCommand / isGetShapeLibrary
+  - 删 src/features/diagram/utils/shape-library-reader.ts (无人调用)
+  - 删 docs/shape-libraries/ 9 个 stencil markdown
+  - LLM 调用面 drawio.* 4 工具 → 3 工具
+  - 加 3 条回归测试证明工具确实砍干净, 防止 "偷偷加回来"
+  - **决策原则**: 用业务路线决定保留谁, 不要 "万一以后用得上" 心态。
+
+## 2026-06-14 · 29 · LLM 多轮上下文接通 (PR #41 feat/multi-turn-context)
+- **上下文**: 用户问 "多轮对话上下文现在怎么管理的"。我读代码发现 useCanvasOrchestrator 已维护完整 ConversationTurn[] (用户原话 + LLM narration + actions), 但**只是 UI 状态**。每次调 /api/generate-draw 时只发当前 utterance, **LLM 是无记忆的**, 用户说 "切到刚才那个风格" 这类指代无法解析。
+- **选择**: **只发 narration 不发 actions** — 最近 5 轮 user+assistant 配对拍成 messages, ai sdk streamText 原生支持。
+- **备选**:
+  - A narration + actions 摘要 — token 翻倍, 对决策帮助有限
+  - B narration + 完整 commands JSON — token 最贵, 只有罕见场景需要 LLM 自我延续
+  - C 不传 history, 用 canvasState 兜底 — 环境状态够 ("画布上有什么"), 对话延续不够 ("上一句你说了什么")
+- **影响**:
+  - streamDrawTool 加 history 字段, 用 messages 替代 prompt (有 history 时切换, 无 history 退化保旧行为)
+  - /api/generate-draw 加 history zod schema (z.array(messageSchema).max(10))
+  - 抽 buildHistoryMessages 到 conversation.ts (纯函数, 7 cases 覆盖空/截断/无效跳过/混合)
+  - 跳过 narration 为空的 turn (streaming 中或失败的不进上下文, 防脏数据)
+  - CONTEXT_MAX_TURNS = 5 (经验值, 客户端服务端各自常量未来可统一)
+  - **决策原则**: token 经济性第一, 增量加上下文要看 ROI。
+
 ## 2026-06-14 · 28 · TTS 30 秒挂死根因诊断 (PR #39 fix/tts-response-format-pcm)
 - **上下文**: 用户切换 LLM provider 后 TTS 全部 canceled, 服务端 30 秒静默不返回。我前后两次错误推断 (key 不对 / yunwu 不能用阿里云端点) 都被用户当场打脸 "你又在编造"。
 - **选择**: **裸 ws 直连阿里云 DashScope 端点诊断**, 不再凭印象推测。
