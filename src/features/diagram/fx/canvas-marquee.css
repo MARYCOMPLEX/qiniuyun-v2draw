@@ -1,19 +1,22 @@
 /**
- * CanvasMarquee 跑马灯 + 呼吸闪烁。
+ * CanvasMarquee 跑马灯 + 呼吸闪烁 (v2 — 真正沿边跑的版本)。
  *
- * 跑马灯实现:
- * - .canvas-marquee__beam 外层 conic-gradient 旋转 4s 一周
- * - mask 挖出 2px 边框 (linear-gradient white 双层做减法), 跑光只显示在边缘
- * - mix-blend-mode: screen 让流光跟暗色画布有正确叠加
+ * v1 失败原因 (PR #48): 旋转整个 div, mask 跟着转, 视觉上变成 4 个静态光斑而非流光沿边滑动。
  *
- * 呼吸闪烁实现:
- * - .canvas-marquee__pulse 边框 box-shadow 1.6s 强弱交替
- * - 跟 streaming-orb-fx__hint 同周期, 视觉同步
+ * v2 实现: 用 @property 注册 --marquee-angle, conic-gradient 引用它,
+ *          div 不动, 让 gradient 起始角度本身动画化 → 真正的流光绕周一圈。
  *
- * 关键约束:
- * - inset: -2px 让流光"长在画布外缘", 不占画布内空间
- * - pointer-events: none 不挡画布交互
+ * 双层视觉:
+ * 1. .canvas-marquee__beam — conic-gradient 4s 一圈, mask 挖中心只显示 2px 边框
+ *    流光从顶部 12 点位置出发顺时针扫一圈, 像跑马灯灯泡
+ * 2. .canvas-marquee__pulse — box-shadow 1.6s 呼吸, 跟 orb hint 同步
  */
+
+@property --marquee-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
 
 .canvas-marquee {
   position: absolute;
@@ -22,21 +25,23 @@
   z-index: 4;
 }
 
-/* 跑马灯 — conic-gradient 旋转 + mask 挖中心 */
+/* 跑马灯流光 — conic-gradient 起始角度动画化 */
 .canvas-marquee__beam {
   position: absolute;
   inset: 0;
   padding: 2px;
+  /* 4 段流光: 透明 → 青 → 蓝 → 紫 → 透明; 区间窄 (约 35% 圆周) 形成 "光带" 而非整圈光晕 */
   background: conic-gradient(
-    from 0deg,
+    from var(--marquee-angle),
     rgba(0, 242, 254, 0) 0%,
-    rgba(0, 242, 254, 0.85) 12%,
-    rgba(79, 172, 254, 0.95) 22%,
-    rgba(217, 70, 239, 0.55) 32%,
-    rgba(0, 242, 254, 0) 45%,
+    rgba(0, 242, 254, 0.9) 8%,
+    rgba(79, 172, 254, 1) 16%,
+    rgba(217, 70, 239, 0.7) 24%,
+    rgba(0, 242, 254, 0) 35%,
     rgba(0, 242, 254, 0) 100%
   );
-  animation: canvas-marquee-spin 4s linear infinite;
+  animation: canvas-marquee-rotate 4s linear infinite;
+  /* mask: 挖空内部, 只保留 2px 边框区域显示流光 */
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -45,8 +50,13 @@
     linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
-  mix-blend-mode: screen;
-  opacity: 0.95;
+  /* 不用 mix-blend-mode: screen — 跟 backdrop-filter 复合时会变奇怪; 直接用 opacity */
+  opacity: 1;
+  filter: drop-shadow(0 0 6px rgba(79, 172, 254, 0.6));
+}
+
+@keyframes canvas-marquee-rotate {
+  to { --marquee-angle: 360deg; }
 }
 
 /* 呼吸边框 — box-shadow 内外双层强弱交替 */
@@ -55,10 +65,6 @@
   inset: 0;
   border: 1px solid rgba(0, 242, 254, 0.35);
   animation: canvas-marquee-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes canvas-marquee-spin {
-  to { transform: rotate(360deg); }
 }
 
 @keyframes canvas-marquee-pulse {
@@ -73,5 +79,19 @@
     box-shadow:
       0 0 24px rgba(79, 172, 254, 0.55),
       inset 0 0 18px rgba(0, 242, 254, 0.25);
+  }
+}
+
+/* 浏览器不支持 @property 时的降级 fallback (Safari < 16.4 等) */
+@supports not (background: conic-gradient(from var(--x))) {
+  .canvas-marquee__beam {
+    /* 降级: 静态光晕, 只靠 pulse 呼吸表达 "进行中" */
+    background: linear-gradient(
+      90deg,
+      rgba(0, 242, 254, 0.4),
+      rgba(79, 172, 254, 0.6),
+      rgba(0, 242, 254, 0.4)
+    );
+    animation: none;
   }
 }
