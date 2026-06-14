@@ -6,6 +6,152 @@
 
 ---
 
+## 2026-06-14 · 28 · TTS 30 秒挂死根因诊断 (PR #39 fix/tts-response-format-pcm)
+- **上下文**: 用户切换 LLM provider 后 TTS 全部 canceled, 服务端 30 秒静默不返回。我前后两次错误推断 (key 不对 / yunwu 不能用阿里云端点) 都被用户当场打脸 "你又在编造"。
+- **选择**: **裸 ws 直连阿里云 DashScope 端点诊断**, 不再凭印象推测。
+- **备选**: 继续猜根因 (key/网络/路由) → 浪费时间。
+- **影响**:
+  - 用 Node 脚本绕过本地路由直连 `wss://dashscope.aliyuncs.com/api-ws/v1/realtime`, 一次性看到 `error: 'Invalid value: pcm_24000hz_mono_16bit. Supported values are: [mp3, wav, pcm, opus]'`
+  - 真根因: 代码用了 Python SDK 常量 `pcm_24000hz_mono_16bit`, 但 ws 协议只接受 4 个枚举字符串
+  - 阿里云返 error 不发 session.updated, 路由 await readyPromise 永远等 → 30 秒挂死
+  - 修复: `response_format: "pcm"`
+  - **教训**: 不确定时先 reproduce, 别推测; 用户说"你又在编造"是触发线, 必须立刻切换到证据驱动调试。
+
+## 2026-06-14 · 27 · TTS canceled 根因 (PR #38 fix/tts-canceled-render-loop)
+- **上下文**: 浏览器 Network 看 `/api/tts` 请求全部 canceled, 不报错也无响应。
+- **选择**: 排查发现 page.tsx 把 `void ttsSpeakRef.current(narration)` 写在 React **render 函数体**里 (不在 useEffect 内), 流式中 narration 累积变化 N 次, 每次触发新 speak, 上一次 fetch 立刻被 abort。
+- **备选**: 加防抖 / 节流 (治标不治本, 副作用仍在 render 里)。
+- **影响**:
+  - 改用 `useEffect([canvas.streaming, canvas.latestNarration])`
+  - 流式中 (streaming=true) 不读, 等落定才 speak
+  - 朗读最终 narration 一次, 不再被中间帧打断
+  - **原则**: 所有副作用必须在 useEffect 内, render 函数纯净。
+
+## 2026-06-14 · 26 · UI 改动需用户明确要求 (AGENTS.md 2.8)
+- **上下文**: 用户两次反馈 "右侧上面的组件又没有了" — 我重写 AgentConversationPanel 时把 TelemetryHUD 顶部 24 格音量条柱状图丢了。第二次反馈语气加重: "没有要求改 UI 不能改, 写入规则。"
+- **选择**: 双层固化:
+  1. 仓库规范: AGENTS.md 新增 2.8 "UI 改动边界" 节, 跟 PR 流程一样强制
+  2. 跨会话记忆: `~/.claude/projects/G--qiniuyun/memory/feedback_ui_change_needs_request.md`
+- **备选**: 只在内存里记 (失败) / 只在 AGENTS.md 写 (跨会话不会自动加载)。
+- **影响**:
+  - 禁止: 删除/移动/重命名已有组件 / 改布局栅格 / 删视觉元素 / 拆面板 / 改主题 token
+  - 允许: 修复确认的 UI bug (hydration / 错位) / 新增可选 prop 默认保持原行为 / typo
+  - 判定规则: 重写组件时新版本字段比旧少, PR 描述必须显式声明 "删除了 X 元素"
+  - **触发线**: 任何 .tsx 改动如果删 JSX 元素或改 className 布局, 先停下问用户。
+
+## 2026-06-14 · 25 · 矢量+图像混合画布 — drawio 优先, 图像作 mxCell 注入 (PR #28-32 五连)
+- **上下文**: 经过两轮重大转向 (矢量画布 → 多模态画布), 用户最终决策: "默认矢量, 然后对于一些小素材我可能语音让 AI 生成然后拼到矢量图上"。要达到 next-ai-drawio 一致的矢量信息图效果。
+- **选择**: 引入 `react-drawio` iframe + 4 工具协议, **图像作为 image mxCell 注入到 drawio 同一画布**, 不维护独立 LayerMap 浮层。
+- **备选**:
+  - A 双 stage 切换 (drawio + InfiniteStage 用 platform.switch_view 切) — 两套交互, 复杂
+  - B 统一 LayerMap 容纳 ShapeLayer + ImageLayer — 自己实现 layer/cell 双协议, 代码大
+  - C iframe 上层叠浮 image — 图像不能跟矢量交互, 失去拖拽对齐能力
+- **影响**:
+  - 引入 `react-drawio` 包, DiagramContext 整张 chartXML 替代 LayerMap
+  - 抄 next-ai-drawio (Apache-2.0) 的 4 工具: `drawio.display_diagram` / `edit_diagram` / `append_diagram` / `get_shape_library`
+  - 工具集统一 `unifiedEnvelopeSchema` (canvas + drawio + platform 三类共 31 工具)
+  - SSE done 事件 → buildImageMxCell → applyEditDiagram add 注入 drawio
+  - 抄 9 个 shape library .md (flowchart/basic/aws4/k8s/azure2/gcp2/bpmn/network/arrows2)
+  - directorPrompt 重写 31 工具版 (默认矢量 + 边路由 7 法则 + image mxCell 写法)
+  - 删除 InfiniteStage / MaskOverlay / useViewport / useMaskTool 等 8 个旧组件 (PR-δ)
+  - 历时 5 个 PR (#28 PR-α 基础 → #29 PR-β dispatcher → #30 PR-γ 图注入 → #31 PR-ε 接通 → #32 PR-δ 清理)
+
+## 2026-06-14 · 24 · Agent 对话面板替代 STREAM LOG (PR #24)
+- **上下文**: 用户反馈"现在的 stream log 不符合需求, 不像在与智能体对话, 我需要了解智能体在干什么"。
+- **选择**: 用 ChatGPT 式对话框替代 TelemetryHUD 单行日志。
+- **备选**: 保留单行日志 + 加 narration 行 (不够 chat 感)。
+- **影响**:
+  - 新建 `AgentConversationPanel`: 用户消息右对齐 + 智能体消息左对齐 + 动作 chip 列表 (待/运行/完成/失败)
+  - useCanvasOrchestrator 加 `turns: ConversationTurn[]` 状态, 每条 cmd 转 AgentAction chip
+  - SSE 异步任务完成时同步更新 chip 状态 + turn 整体 done/failed
+  - 27 工具的中文动作摘要由前端按 tool 名 + 关键参数构造 (不依赖 LLM 多花 tokens)
+
+## 2026-06-14 · 23 · 多模态画布协议 v1.0 — 双层工具集架构 (PR #14-#22 七连)
+- **上下文**: 之前矢量画布的 LLM 输出"low" — 单帧 partial 只能画一个原子图形, 没有全图协调。用户决定转型为"语音操控的多模态 AI 创作平台"。
+- **选择**: 双层工具集严格隔离 — `canvas.*` 业务 (改 LayerMap) + `platform.*` 平台 (改 UI), **两层不可交叉**。命名空间用点分。
+- **备选**:
+  - A 单层工具 (业务/平台混在 canvas.*) — 不利于扩展平台级 OS 范本
+  - B 命名空间用 `_` (`canvas_generate_image`) — 缺少分层语义
+- **影响**:
+  - 27 个工具 (19 canvas + 8 platform), zod schema 全覆盖
+  - 历时 7 个 PR (#14 PR-A 协议 → #15 PR-B Image Provider → #16 PR-C InfiniteStage → #17 PR-E platformReducer → #18 PR-D orchestrator → #19 PR-F directorPrompt → #20 PR-G Mask)
+  - 平台扩展契约: 添加新业务/平台工具有明确的步骤指南
+  - **3 周后再次转型为 drawio + image mxCell 混合方向**, InfiniteStage 等被废弃 (条目 25), 但工具集架构延续
+
+## 2026-06-13 · 22 · A 方案浏览器直连阿里云 NLS — 实时识别取代 batch (PR #1 phase A)
+- **上下文**: batch 上传整段 PCM 模式延迟 4+ 秒, 用户体感"非实时"。考虑切实时识别。
+- **选择**: A 方案 — 浏览器直连阿里云 ws gateway, 后端只签发短期 token。首字延迟 ~250ms。
+- **备选**:
+  - B SSE 中继 (双跳 RTT + 服务端长连接压力)
+  - C 自管 ws server (Next.js 不原生支持, 部署复杂)
+- **影响**:
+  - 后端 `/api/asr-token` 用 `@alicloud/pop-core` CreateToken RPC, globalThis 缓存抗 HMR
+  - 浏览器手写阿里云 ws 协议 (token 走 query, ws 不能设自定义 header)
+  - VAD 改 push 模式 — onUtteranceStart / onAudioFrame / onUtteranceEnd
+  - PCM 入队等 RecognitionStarted 事件 (修复 'Invalid binary message while ROUTING' 协议错)
+  - token fetch + start() 双 in-flight 锁防 VAD 抖动并发请求
+  - IDLE_TIMEOUT 视为静默事件不弹 UI 警告
+
+## 2026-06-13 · 21 · A + D 方案纠偏 — 既成事实 + 触发线 (PR #2 + #3)
+- **上下文**: 项目早期已有 30+ commit 直推 main, 不符合 AGENTS.md 5.4 PR 流程。我提了 4 个补救方案。
+- **选择**: A + D 组合 —
+  - A: 当前 6 个未推 commit 转新分支 `feat/realtime-asr-phaseA` 提 PR
+  - D: AGENTS.md 5.5 加项目阶段适用范围 + 强制 PR 触发线 (单人原型阶段允许直推, 触发线后强制 PR)
+- **备选**:
+  - B 在线伪 PR (cherry-pick + force push 重写已合并 commit, 实操不靠谱)
+  - C 全部 revert + 重做 (历史更乱)
+- **影响**:
+  - 主分支既往直推不回头折腾, 触发线之后强制 PR
+  - 4 条触发线: 第二位贡献者 / 部署生产 / 外部 review / CI/CD 上线
+  - **本次引入 CI/CD 同时即触发 D 方案**, 之后所有改动走 PR
+  - 既成事实条款: 触发线之前直推 commit 不补 PR / 不重写历史
+
+## 2026-06-13 · 20 · CI/CD 简化迁移 — 单服务版本 (PR #4)
+- **上下文**: 想从 anyfast/ad 项目迁 CI/CD 链路 (Docker + GitHub Actions + 阿里云 ACR + SSH 部署)。voice-canvas 比 ad 简单很多 (单服务 vs app+worker+postgres+redis)。
+- **选择**: 简化版 — Dockerfile 三阶段 + docker-compose 单 app 服务 + workflow 触发条件保留 `tag: dev-*`。
+- **备选**: 完整复制 ad 链路 (worker / migrate / blue-green 等多余)。
+- **影响**:
+  - 7 个新文件: Dockerfile / docker-compose.yml / .dockerignore / workflows/deploy.yml / DEPLOY.md / next.config standalone / /api/health
+  - 用户配置清单: GitHub Secrets/Variables (ALIYUN_USERNAME/PASSWORD/REGISTRY/NAMESPACE + SSH_HOST/KEY) + 服务器 deploy 用户 + .env.docker
+  - 手动触发支持 skip_build 重部署
+  - **同时承担 D 方案触发线作用** — 此后所有改动强制走 PR
+
+## 2026-06-13 · 19 · ASR 录音管道 ScriptProcessor → AudioWorklet (fix)
+- **上下文**: 阿里云 NLS 用样例 PCM 完美识别, 用我们前端录的 PCM 完全识别空。诊断脚本生成 wav 让用户播放, 用户反馈"听不到, 是噪音, 不连续的"。
+- **选择**: 砍 ScriptProcessor (浏览器已 deprecate, 会丢帧), 改用 AudioWorklet 跑独立 audio thread。
+- **备选**: 加大 ScriptProcessor buffer (治标不治本, throttle 仍存在)。
+- **影响**:
+  - 录音从断续噪声变成稳定 16k 单声道 PCM
+  - AudioContext 强制 `{sampleRate: 16000}`, 源头出 16k 不再降采样
+  - 启用 echoCancellation/noiseSuppression/autoGainControl 三件套清噪
+  - 不连 destination, 避免回声
+  - 持续录 + 前置缓冲 4 帧, 防止开口头部丢字
+  - 断句后立即清空 chunks 继续监听下一句
+
+## 2026-06-13 · 18 · ASR 路线 SR vs ST (fix)
+- **上下文**: 阿里云 NLS 有两种产品: SpeechRecognition (一句话识别) vs SpeechTranscription (实时识别)。用户配额是 ST 的 2 路并发。
+- **选择**: 用 SR (一句话识别) 走 worker pool 模拟实时。
+- **备选**: ST 实时识别 (但 SDK API 较复杂, 配额限制严格)。
+- **影响**:
+  - 一句话一连接, close 后必关 (协议要求)
+  - Worker pool 容量 2 匹配配额, 阻塞超过用 FIFO 队列
+  - TLS/socket 失败自动重试 3 次, 指数退避 200/400/800ms
+  - **3 周后 A 方案直接切回浏览器直连 ST 实时识别** (条目 22)
+
+## 2026-06-13 · 17 · LLM Provider 重写 — Vercel AI SDK v6 streamText + tools
+- **上下文**: 之前用 streamObject 强制 `tool_choice='required'`, 跟 deepseek/qwen thinking mode 不兼容 (返 400)。换模型必崩。
+- **选择**: streamText + tools (默认 tool_choice='auto'), system prompt 强指令模型必须 call tool。
+- **备选**:
+  - 自实现 ws 协议 (重复造轮子)
+  - 用 dashscope SDK 透传 enable_thinking=false (Vercel AI SDK 不暴露 extra_body)
+- **影响**:
+  - 4 个 provider (openai / anthropic / google / deepseek) 通过 ai-providers.ts 统一抽象
+  - 从 `fullStream` 提取 `tool-input-delta` 组装 partial JSON 文本流, 前端 useDrawStream 零改动
+  - 兼容所有主流 thinking mode 模型
+  - 历时一次反复 — 中途砍掉 Vercel SDK 改用各家官方 SDK, 后又装回 Vercel SDK (条目 25 借鉴 next-ai-drawio 时确认 Vercel SDK 是工业级方案, 自己实现踩坑成本高)
+
+---
+
 ## 2026-06-12 · 11 · UI 密度调优 + light shader 配方修复 (PR · feat/ui-density-and-light-shader)
 - **上下文**: 用户截图反馈两侧栏"内容宽度太小, 字体元素也小"; OBSIDIAN 切到亮主题后 ShaderOrb"看不清"。
 - **选择**:
