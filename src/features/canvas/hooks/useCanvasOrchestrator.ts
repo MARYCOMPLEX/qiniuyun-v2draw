@@ -416,6 +416,7 @@ export function useCanvasOrchestrator(
 
       try {
         const history = buildHistoryMessages(turnsRef.current, CONTEXT_MAX_TURNS);
+        const chartXML = diagramDispatchRef.current?.chartXML?.trim() || undefined;
         const response = await fetch("/api/generate-draw", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -423,6 +424,7 @@ export function useCanvasOrchestrator(
             utterance,
             activeStyleId: activeStyleIdRef.current,
             history,
+            chartXML,
             existingShapes: Array.from(layersRef.current.values()).map((l) => ({
               id: l.id,
               shape: "image",

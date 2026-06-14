@@ -34,7 +34,7 @@ export function streamDrawToolAsTextStream(request: StreamDrawRequest): Response
 
   let systemContent = request.systemPrompt;
   if (request.canvasState) {
-    systemContent += `\n\n---\n## Current Canvas State (AUTHORITATIVE)\n\`\`\`json\n${request.canvasState}\n\`\`\`\n`;
+    systemContent += `\n\n---\n## Current Canvas State (AUTHORITATIVE)\n${request.canvasState}\n`;
   }
 
   const hasHistory = request.history && request.history.length > 0;
