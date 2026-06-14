@@ -30,8 +30,29 @@ const DEFAULT_SIZE = "1024x1024";
 const ensureV1 = (baseURL: string): string =>
   baseURL.endsWith("/v1") ? baseURL : `${baseURL.replace(/\/$/, "")}/v1`;
 
-const sizeToString = (width?: number, height?: number): string =>
-  width && height ? `${width}x${height}` : DEFAULT_SIZE;
+/**
+ * 把任意尺寸映射到生图模型支持的合法尺寸。
+ * - gpt-image-1 / dall-e-3 仅支持固定档位, 按宽高比映射到最近档位
+ * - 其他兼容端点 (yunwu/siliconflow) 接受任意尺寸, 直接透传
+ */
+const sizeToString = (
+  width: number | undefined,
+  height: number | undefined,
+  modelId: string,
+): string => {
+  if (!width || !height) return DEFAULT_SIZE;
+
+  // gpt-image-1 / dall-e-3 强制档位
+  if (modelId.startsWith("gpt-image") || modelId.startsWith("dall-e")) {
+    const ratio = width / height;
+    if (ratio > 1.2) return "1536x1024"; // 横版
+    if (ratio < 0.83) return "1024x1536"; // 竖版
+    return "1024x1024"; // 方形
+  }
+
+  // 其他端点透传原始尺寸
+  return `${width}x${height}`;
+};
 
 export const createOpenAICompatibleImageProvider = (
   config: OpenAICompatibleImageConfig,
@@ -49,7 +70,7 @@ export const createOpenAICompatibleImageProvider = (
       }
       const client = new OpenAI({ apiKey, baseURL: ensureV1(baseURL) });
       const model = request.recipe?.modelId ?? defaultModel;
-      const size = sizeToString(request.width, request.height);
+      const size = sizeToString(request.width, request.height, model);
 
       // OpenAI SDK 类型对 size 字段较严格, 用 as never 绕过 (yunwu/siliconflow 接受任意尺寸字符串)
       const response = await client.images.generate({

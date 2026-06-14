@@ -28,10 +28,8 @@ export function streamDrawToolAsTextStream(request: StreamDrawRequest): Response
 
   const result = streamText({
     model,
-    messages: [
-      { role: "system" as const, content: systemContent },
-      { role: "user" as const, content: request.userUtterance },
-    ],
+    system: systemContent,
+    prompt: request.userUtterance,
     temperature: request.temperature ?? 0,
     ...(request.maxTokens && { maxOutputTokens: request.maxTokens }),
     tools: {
@@ -49,19 +47,41 @@ export function streamDrawToolAsTextStream(request: StreamDrawRequest): Response
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const encoder = new TextEncoder();
+      let closed = false;
+      const safeClose = (): void => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          // 已经被外部 cancel 关掉, 忽略
+        }
+      };
+      const safeEnqueue = (chunk: Uint8Array): void => {
+        if (closed) return;
+        try {
+          controller.enqueue(chunk);
+        } catch {
+          closed = true; // controller 已不可写
+        }
+      };
       try {
         for await (const part of result.fullStream) {
+          if (closed) break;
           if (part.type === "tool-input-delta") {
-            controller.enqueue(encoder.encode(part.delta));
+            safeEnqueue(encoder.encode(part.delta));
           }
         }
-        controller.close();
+        safeClose();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.warn("[streamDrawTool] stream error:", message);
-        controller.enqueue(encoder.encode(`{"error":${JSON.stringify(message)}}`));
-        controller.close();
+        safeEnqueue(encoder.encode(`{"error":${JSON.stringify(message)}}`));
+        safeClose();
       }
+    },
+    cancel() {
+      // 客户端主动断开, 标记 closed 防止 start() 内继续 enqueue
     },
   });
 
