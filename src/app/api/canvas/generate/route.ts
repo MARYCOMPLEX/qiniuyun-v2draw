@@ -84,7 +84,7 @@ async function runGenerationAsync(
       result: {
         imageUrl: result.url,
         thumbnailUrl: result.url,
-        modelId: params.modelId ?? process.env.IMAGE2_MODEL ?? "gpt-image-1",
+        modelId: params.modelId ?? process.env.IMAGE2_MODEL ?? "unknown",
       },
       completedAt: Date.now(),
     });

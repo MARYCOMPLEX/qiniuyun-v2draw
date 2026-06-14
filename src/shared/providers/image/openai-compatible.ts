@@ -57,7 +57,7 @@ const sizeToString = (
 export const createOpenAICompatibleImageProvider = (
   config: OpenAICompatibleImageConfig,
 ): ImageProvider => {
-  const { apiKey, baseURL, defaultModel = "gpt-image-1" } = config;
+  const { apiKey, baseURL, defaultModel } = config;
 
   return {
     id: PROVIDER_ID,
@@ -68,8 +68,13 @@ export const createOpenAICompatibleImageProvider = (
       if (!baseURL) {
         throw new Error("IMAGE2_URL 未配置");
       }
-      const client = new OpenAI({ apiKey, baseURL: ensureV1(baseURL) });
       const model = request.recipe?.modelId ?? defaultModel;
+      if (!model) {
+        throw new Error(
+          "IMAGE2_MODEL 未配置 — 请在 .env.local 加 IMAGE2_MODEL=<模型名>。yunwu 常见: flux-pro / flux-dev / sdxl / flux-1.1-pro",
+        );
+      }
+      const client = new OpenAI({ apiKey, baseURL: ensureV1(baseURL) });
       const size = sizeToString(request.width, request.height, model);
 
       // OpenAI SDK 类型对 size 字段较严格, 用 as never 绕过 (yunwu/siliconflow 接受任意尺寸字符串)
