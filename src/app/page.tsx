@@ -3,8 +3,9 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { AgentConversationPanel } from "@/features/canvas/components/AgentConversationPanel";
-import { InfiniteStage } from "@/features/canvas/components/InfiniteStage";
 import { useCanvasOrchestrator } from "@/features/canvas/hooks/useCanvasOrchestrator";
+import { DrawIoStage } from "@/features/diagram/components/DrawIoStage";
+import { DiagramProvider, useDiagram } from "@/features/diagram/contexts/DiagramContext";
 import { usePlatformState } from "@/features/platform/usePlatformState";
 import { CapabilitiesPanel } from "@/features/voice-control/components/CapabilitiesPanel";
 import { ShaderOrb } from "@/features/voice-control/components/ShaderOrb";
@@ -34,7 +35,19 @@ import {
  *   - PlatformState (主题/面板/语音/TTS/网格/视口) 由 platformReducer 唯一处理
  *   - LayerMap (图像层) 由 useCanvasOrchestrator 维护
  */
+/**
+ * 主页面 — 用 DiagramProvider wrap, 子组件 HomeContent 用 useDiagram。
+ */
 export default function HomePage() {
+  return (
+    <DiagramProvider>
+      <HomeContent />
+    </DiagramProvider>
+  );
+}
+
+function HomeContent() {
+  const diagram = useDiagram();
   const platform = usePlatformState(DEFAULT_STYLE_ID);
   const activeStyleId = platform.state.activeStyleId as StyleId;
   const activeStyle = getStyleById(activeStyleId);
@@ -42,12 +55,14 @@ export default function HomePage() {
   const canvas = useCanvasOrchestrator({
     activeStyleId,
     platformDispatch: platform.dispatch,
+    diagramDispatch: {
+      chartXML: diagram.chartXML,
+      loadDiagram: diagram.loadDiagram,
+    },
   });
   const tts = useTtsStream();
   const { capabilities, isLoading: capabilitiesLoading } = useCapabilities();
   const { toggles, setToggle } = useCapabilityToggles();
-  const [selectedLayerIds, setSelectedLayerIds] = useState<Set<string>>(new Set());
-
   const [livePartial, setLivePartial] = useState<string>("");
   const [finalUtterance, setFinalUtterance] = useState<string>("");
 
@@ -122,25 +137,6 @@ export default function HomePage() {
     void vad.start();
   }, [vad, asr]);
 
-  // Layer 选择
-  const onSelect = useCallback((id: string, additive: boolean) => {
-    setSelectedLayerIds((prev) => {
-      const next = new Set(prev);
-      if (additive) {
-        if (next.has(id)) next.delete(id);
-        else next.add(id);
-      } else {
-        next.clear();
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
-
-  const onDeselectAll = useCallback(() => {
-    setSelectedLayerIds(new Set());
-  }, []);
-
   // (移除旧 hudLogs — 改用 canvas.turns 直接喂给 AgentConversationPanel)
 
   const transcriptToShow = livePartial || finalUtterance;
@@ -189,14 +185,9 @@ export default function HomePage() {
         aria-label="canvas-stage"
         className="relative h-full w-full overflow-hidden rounded-2xl"
       >
-        <InfiniteStage
-          layers={canvas.layers}
-          selectedLayerIds={selectedLayerIds}
-          onSelect={onSelect}
-          onDeselectAll={onDeselectAll}
-          background={activeStyle.background}
-          accentColor={activeStyle.accent}
-          showGrid={platform.state.showGrid}
+        <DrawIoStage
+          drawioUi={activeStyle.ui.mode === "light" ? "min" : "dark"}
+          darkMode={activeStyle.ui.mode !== "light"}
         />
         <p
           className="pointer-events-none absolute left-5 top-5 flex items-center gap-2 text-xs uppercase tracking-[0.3em]"
